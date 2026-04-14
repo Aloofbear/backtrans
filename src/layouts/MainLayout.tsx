@@ -52,7 +52,6 @@ export default function MainLayout() {
       <header className="h-16 border-b border-border bg-surface/50 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-6">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2">
-            <div className="bg-primary text-background font-bold px-2 py-1 rounded text-sm">A文</div>
             <span className="font-bold text-xl tracking-tight">BackTrans</span>
           </Link>
           
@@ -120,7 +119,7 @@ export default function MainLayout() {
             >
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center overflow-hidden">
                 <span className="text-background font-bold text-sm">
-                  {user ? user.charAt(0).toUpperCase() : 'U'}
+                  {user ? user.charAt(0).toUpperCase() : '?'}
                 </span>
               </div>
               <span className="text-sm font-medium hidden sm:block">
@@ -128,21 +127,45 @@ export default function MainLayout() {
               </span>
             </div>
             
-            {showProfileMenu && user && (
+            {showProfileMenu && (
               <div className="absolute right-0 mt-2 w-48 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
-                <div className="p-4 border-b border-border">
-                  <p className="text-xs text-text-muted mb-1">当前登录账号</p>
-                  <p className="font-bold text-sm truncate">{user}</p>
-                </div>
-                <div className="p-2">
-                  <button 
-                    onClick={handleLogout}
-                    className="w-full text-left px-3 py-2 text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    退出登录
-                  </button>
-                </div>
+                {user ? (
+                  <>
+                    <div className="p-4 border-b border-border">
+                      <p className="text-xs text-text-muted mb-1">当前登录账号</p>
+                      <p className="font-bold text-sm truncate">{user}</p>
+                    </div>
+                    <div className="p-2">
+                      <button 
+                        onClick={handleLogout}
+                        className="w-full text-left px-3 py-2 text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        退出登录
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-2 space-y-1">
+                    <div className="p-3 border-b border-border mb-1">
+                      <p className="text-xs text-text-muted">您当前以游客身份访问</p>
+                    </div>
+                    <Link 
+                      to="/login"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-text-main hover:bg-surface-hover rounded-lg transition-colors"
+                    >
+                      <User className="w-4 h-4" />
+                      登录已有账号
+                    </Link>
+                    <Link 
+                      to="/register"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors font-medium"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      注册新账号
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </div>

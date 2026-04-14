@@ -11,8 +11,8 @@ export default function DashboardPage() {
   const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
-    const allHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
-    const userHistory = allHistory.filter((h: any) => h.userId === (user || 'guest'));
+    const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
+    const userHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
     setHistory(userHistory);
 
     const getLocalDateStr = (d: Date) => {

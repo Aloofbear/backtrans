@@ -1,8 +1,20 @@
 import { Link } from 'react-router-dom';
 import { Edit3, ArrowRight, Briefcase, Coffee, Plane, Heart, Zap, BookOpen } from 'lucide-react';
+import { shortSentenceTopics } from '../data/shortSentenceCorpus';
 
 export default function ShortSentenceTopicsPage() {
-  const topics: any[] = [];
+  const topics = shortSentenceTopics;
+
+  // Helper to render icon based on string name
+  const renderIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'Coffee': return <Coffee className="w-6 h-6" />;
+      case 'Briefcase': return <Briefcase className="w-6 h-6" />;
+      case 'Zap': return <Zap className="w-6 h-6" />;
+      case 'Heart': return <Heart className="w-6 h-6" />;
+      default: return <BookOpen className="w-6 h-6" />;
+    }
+  };
 
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
@@ -28,7 +40,7 @@ export default function ShortSentenceTopicsPage() {
             >
               <div className="flex items-center justify-between mb-6">
                 <div className={`${topic.bg} ${topic.color} p-3 rounded-xl`}>
-                  {topic.icon}
+                  {renderIcon(topic.iconName)}
                 </div>
                 <span className="text-xs font-medium text-text-muted bg-background px-2.5 py-1 rounded-full border border-border">
                   {topic.count} 句
@@ -37,7 +49,7 @@ export default function ShortSentenceTopicsPage() {
               
               <h3 className="text-xl font-bold mb-2">{topic.title}</h3>
               <p className="text-sm text-text-muted mb-6 flex-1">
-                掌握该场景下的核心句型和地道表达方式，提升口语和写作的自然度。
+                {topic.description}
               </p>
               
               <div className="flex items-center text-blue-400 text-sm font-medium">

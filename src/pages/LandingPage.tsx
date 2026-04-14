@@ -7,7 +7,6 @@ export default function LandingPage() {
       {/* Header */}
       <header className="container mx-auto px-6 py-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="bg-primary text-background font-bold px-2 py-1 rounded text-sm">A文</div>
           <span className="font-bold text-xl tracking-tight">BackTrans</span>
         </div>
         <div className="flex items-center gap-6">

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import { ArrowLeft, CheckCircle2, Sparkles, RefreshCcw, BookMarked, Share2 } from 'lucide-react';
 import { corpus, CorpusItem } from '../data/corpus';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AnalysisData {
   item: CorpusItem;
@@ -13,11 +14,13 @@ interface AnalysisData {
 export default function AnalysisResultPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [data, setData] = useState<AnalysisData | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
-    const allHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+    const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
+    const allHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
     // Try to find by history record ID (timestamp)
     const historyItem = allHistory.find((h: any) => String(h.id) === id);
 
@@ -75,7 +78,8 @@ export default function AnalysisResultPage() {
   const handleSaveToErrorBook = () => {
     if (!data || isSaved) return;
     
-    const saved = localStorage.getItem('errorBook');
+    const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
+    const saved = localStorage.getItem(errorBookKey);
     const errorItems = saved ? JSON.parse(saved) : [];
     
     const newItem = {
@@ -89,7 +93,7 @@ export default function AnalysisResultPage() {
     };
     
     errorItems.unshift(newItem);
-    localStorage.setItem('errorBook', JSON.stringify(errorItems));
+    localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
     setIsSaved(true);
   };
 

@@ -13,13 +13,17 @@ Original Chinese text: "{{chinese}}"
 Original English text: "{{english}}"
 User's back-translation: "{{user_translation}}"
 
-Please analyze the user's translation. 
-1. 总结全文最重要的6个表达差异
-2. Compare it to the original English text.（逐词逐句分析）
-3. Provide specific suggestions on grammar, word choice, and idiomatic expression.
-4. Highlight what they did well.
-5. Keep your feedback constructive and easy to understand. Format your response in Markdown.
-6. 忽略基础拼写与语法错误，指出重要语法错误`;
+Please analyze the user's translation and provide feedback.
+IMPORTANT: At the end of your response, you MUST provide a section titled "### 重要表达与生词" (Important Expressions and Vocabulary).
+In this section, list the key expressions or words from the original English text that the user missed or could improve upon.
+Format each entry as: "- English Expression/Word | 中文释义"
+Do not include any other text in this specific section.
+
+Example format for the last section:
+### 重要表达与生词
+- unprecedented | 前所未有的
+- in the wake of | 继...之后
+- leverage | 利用`;
 
 export default function TranslationPracticePage() {
   const { id } = useParams();
@@ -100,15 +104,17 @@ export default function TranslationPracticePage() {
       const feedbackText = data.choices[0].message.content;
       setAiFeedback(feedbackText);
 
-      // Mark as completed
-      const completedIds = JSON.parse(localStorage.getItem('completedCorpusIds') || '[]');
+      // Mark as completed (user-specific)
+      const storageKey = user ? `completedCorpusIds_${user}` : 'completedCorpusIds_guest';
+      const completedIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (!completedIds.includes(item.id)) {
         completedIds.push(item.id);
-        localStorage.setItem('completedCorpusIds', JSON.stringify(completedIds));
+        localStorage.setItem(storageKey, JSON.stringify(completedIds));
       }
 
-      // Save practice history
-      const history = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+      // Save practice history (user-specific)
+      const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
+      const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
       const historyId = Date.now();
       history.unshift({
         id: historyId,
@@ -121,7 +127,40 @@ export default function TranslationPracticePage() {
         userTranslation: userTranslation,
         feedback: feedbackText
       });
-      localStorage.setItem('practiceHistory', JSON.stringify(history));
+      localStorage.setItem(historyKey, JSON.stringify(history));
+
+      // Auto-save to error book (user-specific) - Extract key expressions
+      const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
+      const saved = localStorage.getItem(errorBookKey);
+      const errorItems = saved ? JSON.parse(saved) : [];
+      
+      // Extract expressions from the "### 重要表达与生词" section
+      const expressionsMatch = feedbackText.match(/### 重要表达与生词\n([\s\S]*)$/);
+      const expressionsList = expressionsMatch ? expressionsMatch[1].trim().split('\n') : [];
+      
+      const parsedExpressions = expressionsList
+        .filter((line: string) => line.startsWith('- '))
+        .map((line: string) => {
+          const content = line.replace('- ', '');
+          const [english, chinese] = content.split('|').map(s => s.trim());
+          return { english, chinese };
+        })
+        .filter((item: any) => item.english && item.chinese);
+
+      if (parsedExpressions.length > 0) {
+        const newErrorItem = {
+          id: Date.now(),
+          type: 'translation',
+          corpusId: item.id,
+          corpusTitle: item.chinese.length > 20 ? item.chinese.substring(0, 20) + '...' : item.chinese,
+          expressions: parsedExpressions,
+          date: new Date().toISOString().split('T')[0]
+        };
+        
+        errorItems.unshift(newErrorItem);
+        localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
+        setIsSaved(true);
+      }
 
       // Save result for history page
       localStorage.setItem('lastAnalysisResult', JSON.stringify({
@@ -146,26 +185,29 @@ export default function TranslationPracticePage() {
   const handleSaveToErrorBook = () => {
     if (!item || !aiFeedback || isSaved) return;
     
-    const saved = localStorage.getItem('errorBook');
+    const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
+    const saved = localStorage.getItem(errorBookKey);
     const errorItems = saved ? JSON.parse(saved) : [];
     
     const newItem = {
       id: Date.now(),
       type: 'translation',
+      corpusId: item.id,
+      corpusTitle: item.chinese.length > 20 ? item.chinese.substring(0, 20) + '...' : item.chinese,
       source: item.chinese,
       user: userTranslation,
       correction: item.english,
-      note: aiFeedback.substring(0, 200) + '...',
+      note: aiFeedback,
       date: new Date().toISOString().split('T')[0]
     };
     
     errorItems.unshift(newItem);
-    localStorage.setItem('errorBook', JSON.stringify(errorItems));
+    localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
     setIsSaved(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !showOriginal) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !showOriginal) {
       e.preventDefault();
       handleSubmit();
     }
@@ -235,10 +277,15 @@ export default function TranslationPracticePage() {
               onChange={(e) => setUserTranslation(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={showOriginal}
-              placeholder="在此输入你的英文翻译... (按 Enter 提交)"
+              placeholder="在此输入你的英文翻译..."
               className="flex-1 w-full min-h-[200px] p-6 bg-background border border-border rounded-xl focus:ring-2 focus:ring-primary/50 focus:border-primary/50 outline-none transition-all resize-none text-lg leading-relaxed disabled:opacity-50"
               autoFocus
             />
+            
+            <div className="mt-2 text-xs text-text-muted flex justify-between items-center">
+              <span>Enter 换行 / Ctrl + Enter 提交</span>
+              <span>{userTranslation.length} 字符</span>
+            </div>
             
             {!showOriginal && (
               <div className="mt-6 flex justify-end">
