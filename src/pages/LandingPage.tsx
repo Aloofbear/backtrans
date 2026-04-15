@@ -20,11 +20,6 @@ export default function LandingPage() {
       <main className="container mx-auto px-6 pt-20 pb-32 flex flex-col items-center">
         {/* Hero Section */}
         <div className="text-center max-w-4xl mx-auto mb-20">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-medium mb-8">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-            全新一代 AI 语言学习引擎
-          </div>
-          
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-tight">
             打破语言瓶颈 <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400 drop-shadow-[0_0_30px_rgba(0,216,255,0.3)]">

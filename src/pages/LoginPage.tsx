@@ -37,7 +37,6 @@ export default function LoginPage() {
           <ArrowLeft className="w-4 h-4" /> 返回首页
         </Link>
         <div className="flex justify-center items-center gap-2 mb-6">
-          <div className="bg-primary text-background font-bold px-2 py-1 rounded text-sm">A文</div>
           <span className="font-bold text-2xl tracking-tight text-text-main">BackTrans</span>
         </div>
         <h2 className="text-center text-3xl font-extrabold text-text-main">
