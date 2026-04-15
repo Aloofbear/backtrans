@@ -22,10 +22,38 @@ export default function ShortSentencePracticePage() {
 
   useEffect(() => {
     const filtered = shortSentences.filter(s => s.topicId === topicId);
-    // Shuffle sentences
-    const shuffled = [...filtered].sort(() => 0.5 - Math.random());
+    
+    const countsKey = user ? `sentenceCounts_${user}` : 'sentenceCounts_guest';
+    const counts = JSON.parse(localStorage.getItem(countsKey) || '{}');
+
+    // Calculate weights: fewer encounters = higher weight
+    let weightedSentences = filtered.map(s => {
+      const count = counts[s.id] || 0;
+      return {
+        ...s,
+        weight: 1 / Math.pow(count + 1, 2)
+      };
+    });
+
+    // Weighted random shuffle
+    const shuffled = [];
+    while (weightedSentences.length > 0) {
+      const totalWeight = weightedSentences.reduce((sum, s) => sum + s.weight, 0);
+      let random = Math.random() * totalWeight;
+      let selectedIndex = 0;
+      for (let i = 0; i < weightedSentences.length; i++) {
+        random -= weightedSentences[i].weight;
+        if (random <= 0) {
+          selectedIndex = i;
+          break;
+        }
+      }
+      shuffled.push(weightedSentences[selectedIndex]);
+      weightedSentences.splice(selectedIndex, 1);
+    }
+
     setSentences(shuffled);
-  }, [topicId]);
+  }, [topicId, user]);
 
   useEffect(() => {
     if (sentences.length > 0 && currentIndex < sentences.length) {
@@ -145,6 +173,13 @@ export default function ShortSentencePracticePage() {
     
     setIsCorrect(correct);
     setIsSubmitted(true);
+
+    // Increment encounter count
+    const countsKey = user ? `sentenceCounts_${user}` : 'sentenceCounts_guest';
+    const counts = JSON.parse(localStorage.getItem(countsKey) || '{}');
+    const currentSentenceId = sentences[currentIndex].id;
+    counts[currentSentenceId] = (counts[currentSentenceId] || 0) + 1;
+    localStorage.setItem(countsKey, JSON.stringify(counts));
 
     // Save to history
     const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';

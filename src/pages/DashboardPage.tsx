@@ -3,6 +3,39 @@ import { Link } from 'react-router-dom';
 import { BookOpen, Edit3, BookMarked, TrendingUp, Clock, Target, ArrowRight, Flame } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
+const MOTIVATIONAL_QUOTES = [
+  "Every word learned is a seed sown for the future.",
+  "Fluency is the reward of consistency.",
+  "Small steps every day lead to big leaps in time.",
+  "Language learning is a marathon, not a sprint.",
+  "Slow progress is still progress.",
+  "The water of habit eventually carves the stone of difficulty.",
+  "Don’t stop when you’re tired; stop when you’re done.",
+  "Repetition is the mother of mastery.",
+  "Diligence is the only shortcut to excellence.",
+  "Your efforts today will be your confidence tomorrow.",
+  "Mistakes are the echoes of progress.",
+  "Your accent is a trophy of your bravery.",
+  "Don't fear being slow; only fear standing still.",
+  "Speak to express, not to impress.",
+  "A different language is a different vision of life.",
+  "Confidence grows where fear is faced.",
+  "Perfection is the enemy of progress.",
+  "The expert in anything was once a beginner.",
+  "Embrace the struggle; it is the source of strength.",
+  "Turn your \"I can't\" into \"I can't yet.\"",
+  "The limits of your language are the limits of your world.",
+  "English is a bridge to a thousand possibilities.",
+  "Learning a language is like gaining a second soul.",
+  "Open your mouth, and you open the world.",
+  "Vocabulary is the paint; grammar is the brush.",
+  "Beyond words lies a universe of understanding.",
+  "To learn is to live twice.",
+  "Culture is the heart of language; curiosity is its pulse.",
+  "Words have power; use them to build your dream.",
+  "Wisdom begins with the courage to learn."
+];
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [history, setHistory] = useState<any[]>([]);
@@ -55,10 +88,13 @@ export default function DashboardPage() {
     return `${Math.floor(hours / 24)}天前`;
   };
 
+  const quoteIndex = learningDays === 0 ? 0 : (learningDays - 1) % MOTIVATIONAL_QUOTES.length;
+  const currentQuote = MOTIVATIONAL_QUOTES[quoteIndex];
+
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-10">
       {/* Welcome Section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div>
           <h1 className="text-3xl font-bold mb-2">欢迎回来，{user || '学习者'} 👋</h1>
           <p className="text-text-muted">
@@ -68,23 +104,31 @@ export default function DashboardPage() {
             }
           </p>
         </div>
-        <div className="flex gap-4">
-          <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
-            <div className={`p-2 rounded-lg ${learningDays > 0 ? 'bg-orange-500/20 text-orange-500' : 'bg-surface-hover text-text-muted'}`}>
-              <Flame className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-sm text-text-muted">累计练习天数</div>
-              <div className="text-xl font-bold">{learningDays} 天</div>
-            </div>
+        <div className="flex flex-col items-end gap-6">
+          <div 
+            className="text-right max-w-lg text-2xl md:text-4xl text-primary/80 leading-relaxed" 
+            style={{ fontFamily: '"STLiti", "STXingkai", cursive' }}
+          >
+            "{currentQuote}"
           </div>
-          <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
-            <div className={`p-2 rounded-lg ${todayCompleted ? 'bg-primary/20 text-primary' : 'bg-surface-hover text-text-muted'}`}>
-              <Target className="w-6 h-6" />
+          <div className="flex gap-4">
+            <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
+              <div className={`p-2 rounded-lg ${learningDays > 0 ? 'bg-orange-500/20 text-orange-500' : 'bg-surface-hover text-text-muted'}`}>
+                <Flame className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-sm text-text-muted">累计练习天数</div>
+                <div className="text-xl font-bold">{learningDays} 天</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm text-text-muted">今日目标完成度</div>
-              <div className="text-xl font-bold">{todayCompleted ? '100%' : '0%'}</div>
+            <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
+              <div className={`p-2 rounded-lg ${todayCompleted ? 'bg-primary/20 text-primary' : 'bg-surface-hover text-text-muted'}`}>
+                <Target className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-sm text-text-muted">今日目标完成度</div>
+                <div className="text-xl font-bold">{todayCompleted ? '100%' : '0%'}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -104,7 +148,7 @@ export default function DashboardPage() {
               <BookOpen className="w-6 h-6" />
             </div>
             <h3 className="text-xl font-bold mb-2">回译训练</h3>
-            <p className="text-text-muted text-sm mb-6">选择语料进行中英互译，AI 深度解析你的语法和表达。</p>
+            <p className="text-text-muted text-sm mb-6">选择语料进行中译英，AI 深度解析你的语法和表达。</p>
             <div className="flex items-center text-primary text-sm font-medium">
               进入训练 <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
             </div>

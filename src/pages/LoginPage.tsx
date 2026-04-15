@@ -46,6 +46,14 @@ export default function LoginPage() {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <div className="text-warning mt-0.5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          </div>
+          <div className="text-sm text-text-main">
+            <strong>重要提示：</strong> 当前应用使用本地存储，账号及学习数据仅在当前设备的当前浏览器中有效，无法跨设备同步。清理浏览器缓存会导致数据丢失。
+          </div>
+        </div>
         <div className="bg-surface py-8 px-4 shadow sm:rounded-2xl sm:px-10 border border-border">
           <form className="space-y-6" onSubmit={handleLogin}>
             {error && (

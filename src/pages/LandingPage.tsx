@@ -40,9 +40,6 @@ export default function LandingPage() {
             <Link to="/dashboard" className="bg-primary hover:bg-primary-hover text-background px-8 py-3.5 rounded-full font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-[0_0_20px_rgba(0,216,255,0.4)]">
               开始测评体验 <ArrowRight className="w-4 h-4" />
             </Link>
-            <button className="px-8 py-3.5 rounded-full font-medium flex items-center gap-2 border border-border hover:bg-surface transition-colors">
-              <Play className="w-4 h-4 fill-current" /> 观看演示
-            </button>
           </div>
         </div>
 
@@ -60,7 +57,7 @@ export default function LandingPage() {
             </div>
             
             <h3 className="text-2xl font-bold mb-2">回译训练</h3>
-            <p className="text-text-muted text-sm mb-8 max-w-md">左右对照布局，中英互译。提交后 AI 将从语法、词汇、流畅度进行多维度评分。</p>
+            <p className="text-text-muted text-sm mb-8 max-w-md">左右对照布局，中译英。提交后 AI 将从语法、词汇、流畅度进行多维度评分。</p>
             
             {/* Mock UI inside card */}
             <div className="bg-background rounded-xl border border-border p-4 flex gap-4 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -128,7 +125,7 @@ export default function LandingPage() {
                 <Cpu className="w-10 h-10 text-primary" />
               </div>
               <h4 className="text-xl font-bold mb-3">2. 多维 AI 诊断</h4>
-              <p className="text-sm text-text-muted max-w-[250px]">瞬间完成语法、词汇、地道性及语篇逻辑的深度分析。</p>
+              <p className="text-sm text-text-muted max-w-[250px]">AI完成语法、词汇、地道性及语篇逻辑的深度分析。</p>
             </div>
             
             <div className="flex flex-col items-center relative z-10">
