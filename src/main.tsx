@@ -4,7 +4,7 @@ import App from './App.tsx';
 import './index.css';
 
 // Initialize Google Analytics
-const gaMeasurementId = 'G-W3219N587J'; // Hardcoded GA4 Measurement ID
+const gaMeasurementId = 'G-RHMRJY82LY'; // Hardcoded GA4 Measurement ID
 if (gaMeasurementId) {
   const script1 = document.createElement('script');
   script1.async = true;

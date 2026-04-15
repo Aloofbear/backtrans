@@ -67,7 +67,8 @@ export default function TranslationPracticePage() {
         .replace('{{english}}', item.english)
         .replace('{{user_translation}}', userTranslation);
 
-      const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
+      // Hardcoded API key for GitHub Pages deployment
+      const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY || 'sk-c797bb181aae447bbe521dd74cbc6ff2';
       
       if (!apiKey) {
         throw new Error('DeepSeek API Key is missing. Please set VITE_DEEPSEEK_API_KEY in your .env file.');
