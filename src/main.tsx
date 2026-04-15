@@ -3,8 +3,8 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Initialize Google Analytics if Measurement ID is provided
-const gaMeasurementId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+// Initialize Google Analytics
+const gaMeasurementId = 'G-W3219N587J'; // Hardcoded GA4 Measurement ID
 if (gaMeasurementId) {
   const script1 = document.createElement('script');
   script1.async = true;
