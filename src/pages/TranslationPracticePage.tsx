@@ -176,6 +176,8 @@ export default function TranslationPracticePage() {
       console.error('Error generating feedback:', err);
       if (err.name === 'AbortError') {
         setError('请求超时，请检查网络连接或稍后重试。');
+      } else if (err.message === 'Failed to fetch') {
+        setError('网络请求失败 (Failed to fetch)。这通常是因为浏览器拦截了跨域请求(CORS)，或者您的网络/广告拦截插件阻止了访问 DeepSeek API。');
       } else {
         setError(`分析时发生错误: ${err.message}`);
       }
