@@ -90,9 +90,24 @@ export default function ShortSentencePracticePage() {
       ]);
 
       // 寻找候选词：去掉标点符号，且不在停用词表中，长度大于1（排除单字母）
-      const candidates = words
+      let candidates = words
         .map((word: string, index: number) => ({ index, word, cleanWord: word.replace(/[^a-zA-Z]/g, '') }))
         .filter((item: any) => item.cleanWord.length > 1 && !stopWords.has(item.cleanWord.toLowerCase()));
+      
+      // 如果所有词都被过滤掉了（比如 "I'm in." 这种全由停用词组成的短句）
+      // 降级策略 1：允许使用停用词，只要长度大于1
+      if (candidates.length === 0) {
+        candidates = words
+          .map((word: string, index: number) => ({ index, word, cleanWord: word.replace(/[^a-zA-Z]/g, '') }))
+          .filter((item: any) => item.cleanWord.length > 1);
+      }
+      
+      // 降级策略 2：如果连长度大于1的词都没有，那就随便挑一个有字母的词
+      if (candidates.length === 0) {
+        candidates = words
+          .map((word: string, index: number) => ({ index, word, cleanWord: word.replace(/[^a-zA-Z]/g, '') }))
+          .filter((item: any) => item.cleanWord.length > 0);
+      }
       
       // 根据句子长度决定挖空数量，较长的句子最多挖4个空
       const calculatedBlanks = Math.min(Math.max(1, Math.floor(words.length / 4)), 4);

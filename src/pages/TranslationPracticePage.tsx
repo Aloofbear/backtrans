@@ -6,24 +6,44 @@ import { useAuth } from '../contexts/AuthContext';
 import Markdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
 
-const DEFAULT_PROMPT = `You are an expert English teacher and translator. 
-The user is practicing "back-translation" (translating a Chinese text back into its original English form).
+const DEFAULT_PROMPT = `You are a professional bilingual translation expert fluent in Chinese and English. 
+Your task is to analyze the differences between the user's back translation and the original English text.
 
 Original Chinese text: "{{chinese}}"
 Original English text: "{{english}}"
 User's back-translation: "{{user_translation}}"
 
-Please analyze the user's translation and provide feedback.
-IMPORTANT: At the end of your response, you MUST provide a section titled "### 重要表达与生词" (Important Expressions and Vocabulary).
-In this section, list the key expressions or words from the original English text that the user missed or could improve upon.
-Format each entry as: "- English Expression/Word | 中文释义"
-Do not include any other text in this specific section.
+Please follow the structure below. 用中文分析。
 
-Example format for the last section:
-### 重要表达与生词
-- unprecedented | 前所未有的
-- in the wake of | 继...之后
-- leverage | 利用`;
+1. Overall Evaluation
+- Give the user's translation a score out of 10 based on naturalness and accuracy.
+- Summarize the 6 most important expression differences between the user's translation and the original text.
+- Focus on differences in phrasing, collocations, sentence structure, and naturalness.
+
+2. Sentence-by-Sentence Comparison
+For each sentence:
+- Quote the user's translation.
+- Quote the corresponding original sentence.
+- Explain the key differences in wording and expression.
+- Focus especially on whether the expression sounds natural to native speakers.
+
+3. Important Grammar Issues
+Ignore minor spelling mistakes and trivial grammar errors.
+Only point out grammar issues that significantly affect clarity or naturalness.
+
+4. Encouragement
+Provide constructive and encouraging feedback on what the user did well and how they can improve.
+
+5. Native Expressions to Learn
+Highlight 3–5 useful native expressions from the original text that the user should remember.
+Explain why they sound natural.
+
+6. Vocabulary List
+IMPORTANT: You MUST output this final section with the exact heading "### 重要表达与生词".
+List all important or advanced words and expressions from the original text, with Chinese explanations.
+Your explanation should help the user understand how native speakers naturally express the same ideas.
+Format each entry EXACTLY as: "- English Expression/Word | 中文释义"
+Do not include any other text after this section.`;
 
 export default function TranslationPracticePage() {
   const { id } = useParams();
