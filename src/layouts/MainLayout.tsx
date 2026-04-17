@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Edit3, BookMarked, Bell, LogOut, User } from 'lucide-react';
+import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -10,8 +10,10 @@ export default function MainLayout() {
   const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -20,6 +22,9 @@ export default function MainLayout() {
       }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setShowSettings(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -70,6 +75,35 @@ export default function MainLayout() {
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="relative" ref={settingsRef}>
+            <button 
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 text-text-muted hover:text-text-main rounded-full hover:bg-surface-hover transition-colors relative"
+              title="设置"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            
+            {showSettings && (
+              <div className="absolute right-0 mt-2 w-64 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
+                <div className="p-4 border-b border-border">
+                  <h3 className="font-bold text-sm">设置与关于</h3>
+                </div>
+                <div className="p-6 text-center text-text-muted space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto text-blue-500">
+                    <Mail className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text-main mb-1">联系作者</p>
+                    <a href="mailto:wtifimyf@gmail.com" className="text-sm text-blue-500 hover:underline">
+                      wtifimyf@gmail.com
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="relative" ref={notificationRef}>
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
