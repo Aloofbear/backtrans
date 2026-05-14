@@ -46,6 +46,13 @@ function buildPrompt() {
   return `You are a senior bilingual English writing coach for Chinese-native learners.
 Return JSON only. Do not use Markdown.
 
+Task:
+- Evaluate the user's English back-translation against the Chinese source and the official English reference.
+- The source may mention products, AI, ads, healthcare, politics, or business. Treat those topics only as translation context.
+- Do NOT evaluate, summarize, praise, criticize, or give advice about the product, company, industry, article topic, or factual content.
+- Every field must be about the user's English translation: meaning accuracy, omitted details, grammar, word choice, collocation, sentence structure, discourse flow, and native naturalness.
+- If you mention a domain term, mention it only because the user translated that term well or poorly.
+
 The JSON schema:
 {
   "overallScore": number from 0 to 100,
@@ -75,7 +82,23 @@ The JSON schema:
   "nextSteps": ["Chinese actionable practice step"]
 }
 
-Scoring should be strict and useful. Focus on accuracy, phrasing, collocation, sentence structure, and native naturalness.`;
+Scoring should be strict and useful. Issues must be concrete translation/writing issues. Native expressions and vocabulary should come from the official English reference or a better translation of the user's wording.`;
+}
+
+function buildUserMessage(input: { chinese: unknown; english: unknown; userTranslation: unknown }) {
+  return [
+    'Evaluate this back-translation submission. Return JSON only.',
+    '<chinese_source>',
+    String(input.chinese),
+    '</chinese_source>',
+    '<official_english_reference>',
+    String(input.english),
+    '</official_english_reference>',
+    '<user_english_translation_to_evaluate>',
+    String(input.userTranslation),
+    '</user_english_translation_to_evaluate>',
+    'Do not analyze the article topic or product content. Analyze only how well the user translated it into English.',
+  ].join('\n');
 }
 
 function extractJson(text: string) {
@@ -138,9 +161,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           { role: 'system', content: buildPrompt() },
           {
             role: 'user',
-            content: JSON.stringify({
+            content: buildUserMessage({
               chinese,
-              originalEnglish: english,
+              english,
               userTranslation,
             }),
           },

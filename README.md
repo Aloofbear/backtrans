@@ -2,7 +2,9 @@
 
 BackTrans is an English back-translation practice app for Chinese-native learners who want to improve natural written expression. It combines long-form back-translation, short sentence drills, structured feedback, local learning records, and a review queue.
 
-Live demo: https://aloofbear.github.io/backtrans/
+Live demo: https://github-backtrans.vercel.app/
+
+GitHub Pages mirror: https://aloofbear.github.io/backtrans/
 
 ## Product Focus
 
@@ -14,7 +16,7 @@ Live demo: https://aloofbear.github.io/backtrans/
 ## Current Architecture
 
 - Frontend: React, Vite, Tailwind CSS, React Router.
-- AI proxy: `server/index.ts`, an Express endpoint that keeps provider API keys server-side.
+- AI proxy: Vercel serverless API routes in `api/` for production, plus `server/index.ts` as a local development proxy.
 - Persistence: browser `localStorage` scoped by local learning profile.
 - Static hosting: GitHub Pages can serve the app, but AI feedback requires a deployed API proxy.
 
@@ -44,10 +46,10 @@ Prerequisites: Node.js 20+ and npm.
 
 5. Open `http://localhost:3000`.
 
-Vite proxies `/api` to `http://localhost:8787` in local development. If the API is hosted elsewhere, set:
+Vite proxies `/api` to `http://localhost:8787` in local development. If you do not start the local API proxy, set the frontend to use the Vercel API:
 
 ```bash
-VITE_API_BASE_URL="https://your-api.example.com"
+VITE_API_BASE_URL="https://github-backtrans.vercel.app"
 APP_ORIGIN="http://localhost:3000"
 DEEPSEEK_API_KEY="your-server-side-key"
 ```
@@ -58,7 +60,7 @@ Never put AI provider keys in `VITE_*` variables. Vite exposes those values to t
 
 The frontend no longer calls DeepSeek directly. It calls `/api/analyze-translation`, and the server forwards the request with the server-side `DEEPSEEK_API_KEY`.
 
-If the API proxy is not configured, the app falls back to a local diagnostic mode so static demos remain usable without leaking secrets.
+If the API proxy is not reachable, the app falls back to a local diagnostic mode so static demos remain usable without leaking secrets.
 
 ## Deploy With DeepSeek
 
@@ -71,6 +73,12 @@ DEEPSEEK_API_KEY="your-server-side-key"
 DEEPSEEK_MODEL="deepseek-chat"
 DEEPSEEK_API_URL="https://api.deepseek.com/chat/completions"
 APP_ORIGIN="https://your-vercel-domain.vercel.app"
+```
+
+If GitHub Pages should call the Vercel API, set `APP_ORIGIN` to include both origins:
+
+```bash
+APP_ORIGIN="https://github-backtrans.vercel.app,https://aloofbear.github.io"
 ```
 
 After deployment, the frontend calls:

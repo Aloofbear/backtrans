@@ -30,6 +30,8 @@ jobs:
       - name: Corpus QA
         run: npm run qa:corpus
       - name: Build
+        env:
+          VITE_API_BASE_URL: https://github-backtrans.vercel.app
         run: npm run build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

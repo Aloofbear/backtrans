@@ -14,6 +14,8 @@ const DEFAULT_DIMENSIONS = {
   naturalness: 60,
 };
 
+const DEFAULT_REMOTE_API_BASE = 'https://github-backtrans.vercel.app';
+
 function numberInRange(value: unknown, fallback: number) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return fallback;
@@ -77,10 +79,15 @@ export function normalizeFeedback(value: any, provider: AnalysisFeedback['provid
 
 function getApiEndpoint() {
   const configuredBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-  if (!configuredBase && window.location.hostname.endsWith('github.io')) {
-    return null;
+  if (configuredBase) {
+    return `${configuredBase}/api/analyze-translation`;
   }
-  return `${configuredBase}/api/analyze-translation`;
+
+  if (window.location.hostname.endsWith('github.io')) {
+    return `${DEFAULT_REMOTE_API_BASE}/api/analyze-translation`;
+  }
+
+  return '/api/analyze-translation';
 }
 
 export async function analyzeTranslation(input: AnalyzeTranslationInput): Promise<AnalysisFeedback> {
@@ -109,8 +116,7 @@ export async function analyzeTranslation(input: AnalyzeTranslationInput): Promis
   } catch (error: any) {
     return createLocalFeedback({
       ...input,
-      warning: `AI 后端暂不可用，已切换为本地诊断。原因：${error?.message || '未知错误'}`,
+      warning: `AI 分析接口暂不可用，已临时切换为本地诊断。当前请求地址：${endpoint}。原因：${error?.message || '未知错误'}`,
     });
   }
 }
-
