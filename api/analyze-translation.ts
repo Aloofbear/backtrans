@@ -11,9 +11,31 @@ type ApiResponse = {
   end: () => void;
 };
 
+function asHeaderSafeOrigin(origin: string | undefined) {
+  const cleaned = cleanEnvValue(origin);
+  if (!cleaned) return undefined;
+  if (cleaned === '*') return cleaned;
+  if (!/^https?:\/\/[^\s,]+$/i.test(cleaned)) return undefined;
+  return cleaned;
+}
+
+function cleanEnvValue(value: string | undefined) {
+  return value?.replace(/^\uFEFF/, '').trim();
+}
+
 function setCors(req: ApiRequest, res: ApiResponse) {
   const requestOrigin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
-  const allowedOrigin = process.env.APP_ORIGIN || requestOrigin || '*';
+  const configuredOrigins = (process.env.APP_ORIGIN ?? '')
+    .split(',')
+    .map(asHeaderSafeOrigin)
+    .filter((origin): origin is string => Boolean(origin));
+  const safeRequestOrigin = asHeaderSafeOrigin(requestOrigin);
+  const allowedOrigin =
+    configuredOrigins.find((origin) => origin === safeRequestOrigin || origin === '*') ??
+    configuredOrigins[0] ??
+    safeRequestOrigin ??
+    '*';
+
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -92,7 +114,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = cleanEnvValue(process.env.DEEPSEEK_API_KEY);
   if (!apiKey) {
     res.status(503).json({ error: 'AI backend is not configured. Set DEEPSEEK_API_KEY on the server.' });
     return;
@@ -102,14 +124,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const timeout = setTimeout(() => controller.abort(), 60000);
 
   try {
-    const response = await fetch(process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/chat/completions', {
+    const response = await fetch(cleanEnvValue(process.env.DEEPSEEK_API_URL) || 'https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+        model: cleanEnvValue(process.env.DEEPSEEK_MODEL) || 'deepseek-chat',
         temperature: 0.25,
         response_format: { type: 'json_object' },
         messages: [
