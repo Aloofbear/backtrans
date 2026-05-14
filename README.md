@@ -60,6 +60,27 @@ The frontend no longer calls DeepSeek directly. It calls `/api/analyze-translati
 
 If the API proxy is not configured, the app falls back to a local diagnostic mode so static demos remain usable without leaking secrets.
 
+## Deploy With DeepSeek
+
+Recommended production path: deploy this repository to Vercel. Vercel serves the Vite frontend and the serverless API routes in `api/`.
+
+Required Vercel environment variables:
+
+```bash
+DEEPSEEK_API_KEY="your-server-side-key"
+DEEPSEEK_MODEL="deepseek-chat"
+DEEPSEEK_API_URL="https://api.deepseek.com/chat/completions"
+APP_ORIGIN="https://your-vercel-domain.vercel.app"
+```
+
+After deployment, the frontend calls:
+
+```text
+/api/analyze-translation
+```
+
+The browser never receives `DEEPSEEK_API_KEY`.
+
 ## Scripts
 
 ```bash
