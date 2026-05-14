@@ -1,49 +1,37 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Edit3, Send, Loader2, Info, AlertCircle, CheckCircle2, Sparkles, RefreshCcw, BookMarked, Share2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertCircle,
+  ArrowLeft,
+  BookMarked,
+  BookOpen,
+  CheckCircle2,
+  Edit3,
+  Info,
+  Loader2,
+  RefreshCcw,
+  Send,
+  Sparkles,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { analyzeTranslation } from '../lib/analysisClient';
+import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
 import { corpus, CorpusItem } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
-import Markdown from 'react-markdown';
-import { motion, AnimatePresence } from 'motion/react';
+import FeedbackPanel from '../components/FeedbackPanel';
+import type { AnalysisFeedback, ErrorBookEntry, ExpressionItem, PracticeHistoryRecord } from '../types/learning';
 
-const DEFAULT_PROMPT = `You are a professional bilingual translation expert fluent in Chinese and English. 
-Your task is to analyze the differences between the user's back translation and the original English text.
+function getExpressionsFromFeedback(feedback: AnalysisFeedback): ExpressionItem[] {
+  const merged = [...feedback.nativeExpressions, ...feedback.vocabulary];
+  const unique = new Map<string, ExpressionItem>();
 
-Original Chinese text: "{{chinese}}"
-Original English text: "{{english}}"
-User's back-translation: "{{user_translation}}"
+  merged.forEach(item => {
+    const key = item.expression.toLowerCase();
+    if (!unique.has(key)) unique.set(key, item);
+  });
 
-Please follow the structure below. 用中文分析。
-
-1. Overall Evaluation
-- Give the user's translation a score out of 10 based on naturalness and accuracy.
-- Summarize the 6 most important expression differences between the user's translation and the original text.
-- Focus on differences in phrasing, collocations, sentence structure, and naturalness.
-
-2. Sentence-by-Sentence Comparison
-For each sentence:
-- Quote the user's translation.
-- Quote the corresponding original sentence.
-- Explain the key differences in wording and expression.
-- Focus especially on whether the expression sounds natural to native speakers.
-
-3. Important Grammar Issues
-Ignore minor spelling mistakes and trivial grammar errors.
-Only point out grammar issues that significantly affect clarity or naturalness.
-
-4. Encouragement
-Provide constructive and encouraging feedback on what the user did well and how they can improve.
-
-5. Native Expressions to Learn
-Highlight 3–5 useful native expressions from the original text that the user should remember.
-Explain why they sound natural.
-
-6. Vocabulary List
-IMPORTANT: You MUST output this final section with the exact heading "### 重要表达与生词".
-List all important or advanced words and expressions from the original text, with Chinese explanations.
-Your explanation should help the user understand how native speakers naturally express the same ideas.
-Format each entry EXACTLY as: "- English Expression/Word | 中文释义"
-Do not include any other text after this section.`;
+  return Array.from(unique.values()).slice(0, 8);
+}
 
 export default function TranslationPracticePage() {
   const { id } = useParams();
@@ -53,11 +41,11 @@ export default function TranslationPracticePage() {
   const [userTranslation, setUserTranslation] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [aiFeedback, setAiFeedback] = useState('');
+  const [feedback, setFeedback] = useState<AnalysisFeedback | null>(null);
   const [error, setError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const foundItem = corpus.find(c => c.id === id);
@@ -68,170 +56,103 @@ export default function TranslationPracticePage() {
     }
   }, [id, navigate]);
 
+  const saveToErrorBook = (analysis: AnalysisFeedback, auto = false) => {
+    if (!item) return false;
+
+    const expressions = getExpressionsFromFeedback(analysis);
+    if (expressions.length === 0 && auto) return false;
+
+    const errorBookKey = getScopedStorageKey('errorBook', user);
+    const errorItems = readJson<ErrorBookEntry[]>(errorBookKey, []);
+
+    const newItem: ErrorBookEntry = {
+      id: Date.now(),
+      type: 'translation',
+      corpusId: item.id,
+      corpusTitle: item.chinese.length > 20 ? `${item.chinese.substring(0, 20)}...` : item.chinese,
+      expressions,
+      source: item.chinese,
+      user: userTranslation,
+      correction: item.english,
+      note: analysis.summary,
+      date: getTodayDateString(),
+      dueDate: getFutureDateString(auto ? 1 : 0),
+      timesReviewed: 0,
+      status: 'new',
+    };
+
+    writeJson(errorBookKey, [newItem, ...errorItems]);
+    setIsSaved(true);
+    return true;
+  };
+
   const handleSubmit = async () => {
-    if (!userTranslation.trim() || !item) return;
-    
+    if (!userTranslation.trim() || !item || isSubmitting) return;
+
     setIsSubmitting(true);
     setShowOriginal(true);
     setError('');
-    setAiFeedback('');
+    setFeedback(null);
+    setIsSaved(false);
 
-    // Scroll to original text section
     setTimeout(() => {
       resultRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
     try {
-      const prompt = DEFAULT_PROMPT
-        .replace('{{chinese}}', item.chinese)
-        .replace('{{english}}', item.english)
-        .replace('{{user_translation}}', userTranslation);
-
-      // Hardcoded API key for GitHub Pages deployment
-      const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY || 'sk-c797bb181aae447bbe521dd74cbc6ff2';
-      
-      if (!apiKey) {
-        throw new Error('DeepSeek API Key is missing. Please set VITE_DEEPSEEK_API_KEY in your .env file.');
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-      const response = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: prompt },
-            { role: 'user', content: `【中文原文】\n${item.chinese}\n\n【用户英文翻译】\n${userTranslation}` }
-          ],
-          temperature: 0.3
-        }),
-        signal: controller.signal
+      const analysis = await analyzeTranslation({
+        chinese: item.chinese,
+        english: item.english,
+        userTranslation,
       });
 
-      clearTimeout(timeoutId);
+      setFeedback(analysis);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const feedbackText = data.choices[0].message.content;
-      setAiFeedback(feedbackText);
-
-      // Mark as completed (user-specific)
-      const storageKey = user ? `completedCorpusIds_${user}` : 'completedCorpusIds_guest';
-      const completedIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const completedKey = getScopedStorageKey('completedCorpusIds', user);
+      const completedIds = readJson<string[]>(completedKey, []);
       if (!completedIds.includes(item.id)) {
-        completedIds.push(item.id);
-        localStorage.setItem(storageKey, JSON.stringify(completedIds));
+        writeJson(completedKey, [...completedIds, item.id]);
       }
 
-      // Save practice history (user-specific)
-      const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
-      const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+      const historyKey = getScopedStorageKey('practiceHistory', user);
+      const history = readJson<PracticeHistoryRecord[]>(historyKey, []);
       const historyId = Date.now();
-      history.unshift({
+      const record: PracticeHistoryRecord = {
         id: historyId,
         userId: user || 'guest',
-        title: item.chinese.length > 15 ? item.chinese.substring(0, 15) + '...' : item.chinese,
+        title: item.chinese.length > 15 ? `${item.chinese.substring(0, 15)}...` : item.chinese,
         type: '回译',
-        score: 90,
+        score: analysis.overallScore,
         timestamp: new Date().toISOString(),
-        item: item,
-        userTranslation: userTranslation,
-        feedback: feedbackText
-      });
-      localStorage.setItem(historyKey, JSON.stringify(history));
-
-      // Auto-save to error book (user-specific) - Extract key expressions
-      const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
-      const saved = localStorage.getItem(errorBookKey);
-      const errorItems = saved ? JSON.parse(saved) : [];
-      
-      // Extract expressions from the "### 重要表达与生词" section
-      const expressionsMatch = feedbackText.match(/### 重要表达与生词\n([\s\S]*)$/);
-      const expressionsList = expressionsMatch ? expressionsMatch[1].trim().split('\n') : [];
-      
-      const parsedExpressions = expressionsList
-        .filter((line: string) => line.startsWith('- '))
-        .map((line: string) => {
-          const content = line.replace('- ', '');
-          const [english, chinese] = content.split('|').map(s => s.trim());
-          return { english, chinese };
-        })
-        .filter((item: any) => item.english && item.chinese);
-
-      if (parsedExpressions.length > 0) {
-        const newErrorItem = {
-          id: Date.now(),
-          type: 'translation',
-          corpusId: item.id,
-          corpusTitle: item.chinese.length > 20 ? item.chinese.substring(0, 20) + '...' : item.chinese,
-          expressions: parsedExpressions,
-          date: new Date().toISOString().split('T')[0]
-        };
-        
-        errorItems.unshift(newErrorItem);
-        localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
-        setIsSaved(true);
-      }
-
-      // Save result for history page
-      localStorage.setItem('lastAnalysisResult', JSON.stringify({
+        corpusId: item.id,
         item,
         userTranslation,
-        feedback: feedbackText,
-        timestamp: historyId
-      }));
+        feedback: analysis,
+      };
 
-      setIsSubmitting(false);
+      writeJson(historyKey, [record, ...history]);
+      saveToErrorBook(analysis, true);
+      writeJson('lastAnalysisResult', {
+        item,
+        userTranslation,
+        feedback: analysis,
+        timestamp: historyId,
+      });
     } catch (err: any) {
-      console.error('Error generating feedback:', err);
-      if (err.name === 'AbortError') {
-        setError('请求超时，请检查网络连接或稍后重试。');
-      } else if (err.message === 'Failed to fetch') {
-        setError('网络请求失败 (Failed to fetch)。这通常是因为浏览器拦截了跨域请求(CORS)，或者您的网络/广告拦截插件阻止了访问 DeepSeek API。');
-      } else {
-        setError(`分析时发生错误: ${err.message}`);
-      }
+      setError(`分析时发生错误：${err?.message || '未知错误'}`);
+    } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleSaveToErrorBook = () => {
-    if (!item || !aiFeedback || isSaved) return;
-    
-    const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
-    const saved = localStorage.getItem(errorBookKey);
-    const errorItems = saved ? JSON.parse(saved) : [];
-    
-    const newItem = {
-      id: Date.now(),
-      type: 'translation',
-      corpusId: item.id,
-      corpusTitle: item.chinese.length > 20 ? item.chinese.substring(0, 20) + '...' : item.chinese,
-      source: item.chinese,
-      user: userTranslation,
-      correction: item.english,
-      note: aiFeedback,
-      date: new Date().toISOString().split('T')[0]
-    };
-    
-    errorItems.unshift(newItem);
-    localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
-    setIsSaved(true);
+  const handleManualSave = () => {
+    if (!feedback || isSaved) return;
+    saveToErrorBook(feedback, false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !showOriginal) {
-      e.preventDefault();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !showOriginal) {
+      event.preventDefault();
       handleSubmit();
     }
   };
@@ -239,86 +160,81 @@ export default function TranslationPracticePage() {
   if (!item) return <div className="p-10 text-center">Loading...</div>;
 
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8 pb-32">
-      {/* Header */}
+    <div className="mx-auto max-w-5xl space-y-8 p-6 pb-32 md:p-10">
       <div className="flex items-center justify-between">
-        <button 
+        <button
           onClick={() => navigate('/corpus')}
-          className="flex items-center gap-2 text-text-muted hover:text-text-main transition-colors"
+          className="flex items-center gap-2 text-text-muted transition-colors hover:text-text-main"
         >
-          <ArrowLeft className="w-4 h-4" /> 返回主题列表
+          <ArrowLeft className="h-4 w-4" /> 返回主题列表
         </button>
-        <div className="text-sm font-medium text-text-muted bg-surface px-3 py-1 rounded-full border border-border">
+        <div className="rounded-full border border-border bg-surface px-3 py-1 text-sm font-medium text-text-muted">
           回译训练模式
         </div>
       </div>
 
       {error && (
-        <div className="bg-danger/10 border border-danger/20 text-danger p-4 rounded-xl flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0" />
+        <div className="flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/10 p-4 text-danger">
+          <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="text-sm font-medium">{error}</p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Source Text Area */}
-        <div className="bg-surface border border-border rounded-2xl p-6 md:p-8 flex flex-col">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="bg-primary/20 p-2 rounded-lg text-primary">
-              <BookOpen className="w-5 h-5" />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="flex flex-col rounded-2xl border border-border bg-surface p-6 md:p-8">
+          <div className="mb-6 flex items-center gap-2">
+            <div className="rounded-lg bg-primary/20 p-2 text-primary">
+              <BookOpen className="h-5 w-5" />
             </div>
             <h2 className="text-lg font-bold">中文原文 (Source)</h2>
           </div>
-          
-          <div className="flex-1 bg-background rounded-xl p-6 border border-border">
-            <p className="text-lg leading-relaxed font-medium whitespace-pre-wrap">
-              {item.chinese}
-            </p>
+
+          <div className="flex-1 rounded-xl border border-border bg-background p-6">
+            <p className="whitespace-pre-wrap text-lg font-medium leading-relaxed">{item.chinese}</p>
           </div>
-          
-          <div className="mt-6 flex items-start gap-3 text-sm text-text-muted bg-primary/5 p-4 rounded-xl border border-primary/10">
-            <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-            <p>请仔细阅读左侧的中文原文，并在右侧输入框中将其翻译回英文。尽量使用地道的表达方式。</p>
+
+          <div className="mt-6 flex items-start gap-3 rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm text-text-muted">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <p>先完整输出你的英文表达，再对照原文复盘。AI 后端不可用时，系统会自动给出本地基础诊断。</p>
           </div>
         </div>
 
-        {/* Translation Input Area */}
-        <div className="bg-surface border border-border rounded-2xl p-6 md:p-8 flex flex-col relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-          
-          <div className="flex items-center gap-2 mb-6 relative z-10">
-            <div className="bg-blue-500/20 p-2 rounded-lg text-blue-400">
-              <Edit3 className="w-5 h-5" />
+        <div className="relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface p-6 md:p-8">
+          <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl"></div>
+
+          <div className="relative z-10 mb-6 flex items-center gap-2">
+            <div className="rounded-lg bg-blue-500/20 p-2 text-blue-400">
+              <Edit3 className="h-5 w-5" />
             </div>
             <h2 className="text-lg font-bold">你的翻译 (Target)</h2>
           </div>
-          
-          <div className="flex-1 flex flex-col relative z-10">
+
+          <div className="relative z-10 flex flex-1 flex-col">
             <textarea
               ref={textareaRef}
               value={userTranslation}
-              onChange={(e) => setUserTranslation(e.target.value)}
+              onChange={(event) => setUserTranslation(event.target.value)}
               onKeyDown={handleKeyDown}
               disabled={showOriginal}
               placeholder="在此输入你的英文翻译..."
-              className="flex-1 w-full min-h-[200px] p-6 bg-background border border-border rounded-xl focus:ring-2 focus:ring-primary/50 focus:border-primary/50 outline-none transition-all resize-none text-lg leading-relaxed disabled:opacity-50"
+              className="min-h-[220px] flex-1 resize-none rounded-xl border border-border bg-background p-6 text-lg leading-relaxed outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
               autoFocus
             />
-            
-            <div className="mt-2 text-xs text-text-muted flex justify-between items-center">
+
+            <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
               <span>Enter 换行 / Ctrl + Enter 提交</span>
               <span>{userTranslation.length} 字符</span>
             </div>
-            
+
             {!showOriginal && (
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={handleSubmit}
                   disabled={!userTranslation.trim() || isSubmitting}
-                  className="flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:bg-surface disabled:text-text-muted disabled:border-border text-background px-8 py-3.5 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(0,216,255,0.2)] disabled:shadow-none"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-background shadow-[0_0_20px_rgba(0,216,255,0.2)] transition-all hover:bg-primary-hover disabled:border disabled:border-border disabled:bg-surface disabled:text-text-muted disabled:shadow-none"
                 >
                   <span>提交</span>
-                  <Send className="w-5 h-5" />
+                  <Send className="h-5 w-5" />
                 </button>
               </div>
             )}
@@ -326,78 +242,68 @@ export default function TranslationPracticePage() {
         </div>
       </div>
 
-      {/* Result Section */}
       <AnimatePresence>
         {showOriginal && (
-          <motion.div 
+          <motion.div
             ref={resultRef}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-8 pt-8 border-t border-border/50"
+            className="space-y-8 border-t border-border/50 pt-8"
           >
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Original English */}
-              <div className="bg-surface border border-success/30 rounded-2xl p-6 md:p-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-success/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
-                <div className="flex items-center gap-2 mb-4 relative z-10">
-                  <CheckCircle2 className="w-5 h-5 text-success" />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="relative overflow-hidden rounded-2xl border border-success/30 bg-surface p-6 md:p-8">
+                <div className="absolute right-0 top-0 h-32 w-32 translate-x-1/2 -translate-y-1/2 rounded-full bg-success/10 blur-2xl"></div>
+                <div className="relative z-10 mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
                   <h3 className="font-bold text-success">地道原文 (Original)</h3>
                 </div>
-                <p className="text-xl font-medium relative z-10 whitespace-pre-wrap leading-relaxed">
-                  {item.english}
-                </p>
+                <p className="relative z-10 whitespace-pre-wrap text-xl font-medium leading-relaxed">{item.english}</p>
               </div>
 
-              {/* AI Feedback */}
-              <div className="bg-surface border border-primary/30 rounded-2xl p-6 md:p-8 shadow-[0_0_30px_rgba(0,216,255,0.05)] relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                
-                <div className="flex items-center justify-between mb-8 relative z-10">
+              <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-surface p-6 shadow-[0_0_30px_rgba(0,216,255,0.05)] md:p-8">
+                <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl"></div>
+
+                <div className="relative z-10 mb-8 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="bg-primary/20 p-2 rounded-lg text-primary">
-                      <Sparkles className="w-5 h-5" />
+                    <div className="rounded-lg bg-primary/20 p-2 text-primary">
+                      <Sparkles className="h-5 w-5" />
                     </div>
-                    <h2 className="text-xl font-bold">AI 深度解析</h2>
+                    <h2 className="text-xl font-bold">深度分析</h2>
                   </div>
-                  
-                  {aiFeedback && (
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={handleSaveToErrorBook}
-                        className={`p-2 rounded-lg transition-colors border ${isSaved ? 'text-purple-400 bg-purple-500/10 border-purple-500/30' : 'text-text-muted hover:text-purple-400 bg-surface border-border'}`} 
-                        title={isSaved ? "已加入错题本" : "加入错题本"}
-                      >
-                        <BookMarked className="w-4 h-4" />
-                      </button>
-                    </div>
+
+                  {feedback && (
+                    <button
+                      onClick={handleManualSave}
+                      className={`rounded-lg border p-2 transition-colors ${
+                        isSaved
+                          ? 'border-purple-500/30 bg-purple-500/10 text-purple-400'
+                          : 'border-border bg-surface text-text-muted hover:text-purple-400'
+                      }`}
+                      title={isSaved ? '已加入错题本' : '加入错题本'}
+                    >
+                      <BookMarked className="h-4 w-4" />
+                    </button>
                   )}
                 </div>
-                
-                {isSubmitting && !aiFeedback ? (
+
+                {isSubmitting && !feedback ? (
                   <div className="flex flex-col items-center justify-center py-12 text-text-muted">
-                    <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
-                    <p className="animate-pulse">AI 正在分析您的翻译，请稍候...</p>
+                    <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
+                    <p className="animate-pulse">正在分析你的翻译...</p>
                   </div>
                 ) : (
-                  <div className="prose prose-invert prose-p:text-text-main prose-headings:text-text-main prose-a:text-primary hover:prose-a:text-primary-hover prose-strong:text-primary prose-code:text-pink-400 prose-code:bg-pink-400/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none max-w-none relative z-10">
-                    <Markdown>{aiFeedback}</Markdown>
-                  </div>
+                  feedback && <FeedbackPanel feedback={feedback} />
                 )}
               </div>
             </div>
 
-            {/* Next Action */}
-            {aiFeedback && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex justify-center pt-8"
-              >
+            {feedback && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center pt-8">
                 <Link
                   to="/corpus"
-                  className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-background px-8 py-3.5 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(0,216,255,0.2)] hover:scale-105"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-background shadow-[0_0_20px_rgba(0,216,255,0.2)] transition-all hover:scale-105 hover:bg-primary-hover"
                 >
-                  <RefreshCcw className="w-5 h-5" />
+                  <RefreshCcw className="h-5 w-5" />
                   <span>继续下一篇</span>
                 </Link>
               </motion.div>

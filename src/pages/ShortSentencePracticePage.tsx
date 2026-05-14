@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, Lightbulb, ArrowRight, BookMarked, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { shortSentences, shortSentenceTopics } from '../data/shortSentenceCorpus';
+import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
+import type { ErrorBookEntry, PracticeHistoryRecord } from '../types/learning';
 
 export default function ShortSentencePracticePage() {
   const { topicId } = useParams();
@@ -23,8 +25,8 @@ export default function ShortSentencePracticePage() {
   useEffect(() => {
     const filtered = shortSentences.filter(s => s.topicId === topicId);
     
-    const countsKey = user ? `sentenceCounts_${user}` : 'sentenceCounts_guest';
-    const counts = JSON.parse(localStorage.getItem(countsKey) || '{}');
+    const countsKey = getScopedStorageKey('sentenceCounts', user);
+    const counts = readJson<Record<string, number>>(countsKey, {});
 
     // Calculate weights: fewer encounters = higher weight
     let weightedSentences = filtered.map(s => {
@@ -190,24 +192,28 @@ export default function ShortSentencePracticePage() {
     setIsSubmitted(true);
 
     // Increment encounter count
-    const countsKey = user ? `sentenceCounts_${user}` : 'sentenceCounts_guest';
-    const counts = JSON.parse(localStorage.getItem(countsKey) || '{}');
+    const countsKey = getScopedStorageKey('sentenceCounts', user);
+    const counts = readJson<Record<string, number>>(countsKey, {});
     const currentSentenceId = sentences[currentIndex].id;
     counts[currentSentenceId] = (counts[currentSentenceId] || 0) + 1;
-    localStorage.setItem(countsKey, JSON.stringify(counts));
+    writeJson(countsKey, counts);
 
     // Save to history
-    const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
-    const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
-    history.unshift({
+    const historyKey = getScopedStorageKey('practiceHistory', user);
+    const history = readJson<PracticeHistoryRecord[]>(historyKey, []);
+    const currentSentence = sentences[currentIndex];
+    const record: PracticeHistoryRecord = {
       id: Date.now(),
       userId: user || 'guest',
       type: '短句',
       title: topic?.title || '短句训练',
       timestamp: new Date().toISOString(),
-      score: correct ? 100 : 0
-    });
-    localStorage.setItem(historyKey, JSON.stringify(history));
+      score: correct ? 100 : 0,
+      topicId: topicId || currentSentence.topicId,
+      sentenceId: currentSentence.id,
+      isCorrect: correct,
+    };
+    writeJson(historyKey, [record, ...history]);
   };
 
   const handleNext = () => {
@@ -235,25 +241,26 @@ export default function ShortSentencePracticePage() {
   const handleSaveToErrorBook = () => {
     if (isSaved) return;
     
-    const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
-    const saved = localStorage.getItem(errorBookKey);
-    const errorItems = saved ? JSON.parse(saved) : [];
+    const errorBookKey = getScopedStorageKey('errorBook', user);
+    const errorItems = readJson<ErrorBookEntry[]>(errorBookKey, []);
     
     const currentSentence = sentences[currentIndex];
     
-    const newItem = {
+    const newItem: ErrorBookEntry = {
       id: Date.now(),
       type: 'short-sentence',
       corpusId: currentSentence.id,
       corpusTitle: topic?.title || '短句训练',
       expressions: [
-        { english: currentSentence.english, chinese: currentSentence.chinese }
+        { expression: currentSentence.english, meaning: currentSentence.chinese }
       ],
-      date: new Date().toISOString().split('T')[0]
+      date: getTodayDateString(),
+      dueDate: getFutureDateString(1),
+      timesReviewed: 0,
+      status: 'new',
     };
     
-    errorItems.unshift(newItem);
-    localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
+    writeJson(errorBookKey, [newItem, ...errorItems]);
     setIsSaved(true);
   };
 

@@ -12,7 +12,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-6">
           <Link to="/login" className="text-sm font-medium hover:text-primary transition-colors">登录</Link>
           <Link to="/register" className="bg-primary hover:bg-primary-hover text-background px-5 py-2 rounded-full text-sm font-bold transition-colors">
-            免费注册
+            创建档案
           </Link>
         </div>
       </header>
@@ -33,7 +33,7 @@ export default function LandingPage() {
           
           <div className="flex items-center justify-center gap-4">
             <Link to="/dashboard" className="bg-primary hover:bg-primary-hover text-background px-8 py-3.5 rounded-full font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-[0_0_20px_rgba(0,216,255,0.4)]">
-              开始测评体验 <ArrowRight className="w-4 h-4" />
+              立即开始训练 <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
         </div>
@@ -137,10 +137,10 @@ export default function LandingPage() {
         <div className="w-full max-w-4xl bg-surface border border-border rounded-3xl p-12 text-center relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent"></div>
           <h2 className="text-3xl font-bold mb-4 relative z-10">准备好突破语言瓶颈了吗？</h2>
-          <p className="text-text-muted mb-8 relative z-10">立即注册，免费体验完整的 AI 回译训练流程，开启你的高效语言学习之旅。</p>
+          <p className="text-text-muted mb-8 relative z-10">创建本地学习档案，体验完整的 AI 回译训练流程，开启你的高效语言学习之旅。</p>
           <div className="flex items-center justify-center gap-4 relative z-10">
             <Link to="/register" className="bg-primary hover:bg-primary-hover text-background px-8 py-3 rounded-full font-bold transition-colors">
-              创建免费账号
+              创建本地档案
             </Link>
             <Link to="/login" className="px-8 py-3 rounded-full font-medium border border-border hover:bg-surface-hover transition-colors">
               已有账号登录

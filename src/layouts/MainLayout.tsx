@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, displayName, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -44,7 +44,7 @@ export default function MainLayout() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col pb-20 md:pb-0">
       {/* Top Navigation Bar */}
       <header className="h-16 border-b border-border bg-surface/50 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-6">
         <div className="flex items-center gap-8">
@@ -98,6 +98,9 @@ export default function MainLayout() {
                     <a href="mailto:wtifimyf@gmail.com" className="text-sm text-blue-500 hover:underline">
                       wtifimyf@gmail.com
                     </a>
+                    <p className="mt-3 text-xs leading-relaxed text-text-muted">
+                      当前版本采用本地学习档案。AI 分析需连接后端代理，不会在前端保存 API Key。
+                    </p>
                   </div>
                 </div>
               </div>
@@ -132,11 +135,11 @@ export default function MainLayout() {
             >
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center overflow-hidden">
                 <span className="text-background font-bold text-sm">
-                  {user ? user.charAt(0).toUpperCase() : '?'}
+                  {(displayName || user || '?').charAt(0).toUpperCase()}
                 </span>
               </div>
               <span className="text-sm font-medium hidden sm:block">
-                {user || '未登录'}
+                {displayName || (user ? user : '游客模式')}
               </span>
             </div>
             
@@ -146,7 +149,7 @@ export default function MainLayout() {
                   <>
                     <div className="p-4 border-b border-border">
                       <p className="text-xs text-text-muted mb-1">当前登录账号</p>
-                      <p className="font-bold text-sm truncate">{user}</p>
+                      <p className="font-bold text-sm truncate">{displayName || user}</p>
                     </div>
                     <div className="p-2">
                       <button 
@@ -189,6 +192,29 @@ export default function MainLayout() {
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
+
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 px-2 py-2 backdrop-blur md:hidden">
+        <div className="grid grid-cols-4 gap-1">
+          {navItems.map((item) => {
+            const isActive = location.pathname.startsWith(item.path);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-text-muted hover:bg-surface-hover hover:text-text-main"
+                )}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

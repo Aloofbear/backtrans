@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Edit3, BookMarked, TrendingUp, Clock, Target, ArrowRight, Flame } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getScopedStorageKey, readJson } from '../lib/storage';
+import type { ErrorBookEntry, PracticeHistoryRecord } from '../types/learning';
 
 const MOTIVATIONAL_QUOTES = [
   "Every word learned is a seed sown for the future.",
@@ -37,15 +39,16 @@ const MOTIVATIONAL_QUOTES = [
 ];
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const [history, setHistory] = useState<any[]>([]);
+  const { user, displayName } = useAuth();
+  const [history, setHistory] = useState<PracticeHistoryRecord[]>([]);
   const [learningDays, setLearningDays] = useState(0);
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [dueReviews, setDueReviews] = useState(0);
 
   useEffect(() => {
-    const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
-    const userHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+    const historyKey = getScopedStorageKey('practiceHistory', user);
+    const userHistory = readJson<PracticeHistoryRecord[]>(historyKey, []);
     setHistory(userHistory);
 
     const getLocalDateStr = (d: Date) => {
@@ -76,6 +79,10 @@ export default function DashboardPage() {
     });
     setChartData(cData);
 
+    const errorBookKey = getScopedStorageKey('errorBook', user);
+    const errorBook = readJson<ErrorBookEntry[]>(errorBookKey, []);
+    setDueReviews(errorBook.filter(item => item.status !== 'mastered' && (!item.dueDate || item.dueDate <= todayStr)).length);
+
   }, [user]);
 
   const formatTimeAgo = (timestamp: string) => {
@@ -96,7 +103,7 @@ export default function DashboardPage() {
       {/* Welcome Section */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold mb-2">欢迎回来，{user || '学习者'} 👋</h1>
+          <h1 className="text-3xl font-bold mb-2">欢迎回来，{displayName || '学习者'}</h1>
           <p className="text-text-muted">
             {learningDays > 0 
               ? <>今天是您坚持学习的第 <span className="text-primary font-bold">{learningDays}</span> 天，继续保持！</>
@@ -128,6 +135,15 @@ export default function DashboardPage() {
               <div>
                 <div className="text-sm text-text-muted">今日目标完成度</div>
                 <div className="text-xl font-bold">{todayCompleted ? '100%' : '0%'}</div>
+              </div>
+            </div>
+            <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
+              <div className={`p-2 rounded-lg ${dueReviews > 0 ? 'bg-purple-500/20 text-purple-400' : 'bg-surface-hover text-text-muted'}`}>
+                <BookMarked className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-sm text-text-muted">待复习表达</div>
+                <div className="text-xl font-bold">{dueReviews} 条</div>
               </div>
             </div>
           </div>
@@ -248,7 +264,7 @@ export default function DashboardPage() {
               history.slice(0, 5).map((record, i) => (
                 <Link 
                   key={i} 
-                  to={`/analysis/${record.id}`}
+                  to={record.type === '回译' ? `/analysis/${record.id}` : (record.topicId ? `/short-sentence/${record.topicId}` : '/short-sentence')}
                   className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-hover transition-colors cursor-pointer border border-transparent hover:border-border"
                 >
                   <div className="flex items-center gap-3">

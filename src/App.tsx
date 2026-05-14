@@ -18,12 +18,12 @@ export default function App() {
     <AuthProvider>
       <HashRouter>
         <Routes>
-          {/* Public Routes */}
+          {/* Entry Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Protected Routes (Wrapped in MainLayout) */}
+          {/* Learning Routes (guest and local profiles are both supported) */}
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/corpus" element={<CorpusSelectPage />} />

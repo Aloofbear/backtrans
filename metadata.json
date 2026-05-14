@@ -1,5 +1,5 @@
 {
   "name": "Back-Translation Practice",
-  "description": "A tool to help users practice English back-translation with AI feedback.",
+  "description": "An English back-translation practice app with structured feedback, local learning profiles, and review queues.",
   "requestFramePermissions": []
 }

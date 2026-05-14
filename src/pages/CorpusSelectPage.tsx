@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BookOpen, ArrowRight, AlertCircle } from 'lucide-react';
 import { corpus, corpusTopics } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
+import { getScopedStorageKey, readJson } from '../lib/storage';
 
 export default function CorpusSelectPage() {
   const navigate = useNavigate();
@@ -21,8 +22,8 @@ export default function CorpusSelectPage() {
     }
 
     // Get completed items from localStorage (user-specific)
-    const storageKey = user ? `completedCorpusIds_${user}` : 'completedCorpusIds_guest';
-    const completedIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    const storageKey = getScopedStorageKey('completedCorpusIds', user);
+    const completedIds = readJson<string[]>(storageKey, []);
     
     // Filter out completed items
     const availableCorpus = topicCorpus.filter(c => !completedIds.includes(c.id));
@@ -65,8 +66,8 @@ export default function CorpusSelectPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {corpusTopics.map((topic) => {
           const totalCount = corpus.filter(c => c.topicId === topic.id).length;
-          const storageKey = user ? `completedCorpusIds_${user}` : 'completedCorpusIds_guest';
-          const completedIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          const storageKey = getScopedStorageKey('completedCorpusIds', user);
+          const completedIds = readJson<string[]>(storageKey, []);
           const completedCount = corpus.filter(c => c.topicId === topic.id && completedIds.includes(c.id)).length;
 
           return (

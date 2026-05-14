@@ -1,131 +1,101 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, UserRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft } from 'lucide-react';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [profileName, setProfileName] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { profiles, login, createProfile, refreshProfiles } = useAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    refreshProfiles();
+  }, [refreshProfiles]);
+
+  const handleEnter = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!username || !password) {
-      setError('请输入用户名和密码');
+    const trimmed = profileName.trim();
+    if (!trimmed) {
+      setError('请输入本地学习档案名称');
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const user = users.find((u: any) => u.username === username && u.password === password);
-    
-    if (user) {
-      login(username);
-      navigate('/dashboard');
-    } else {
-      setError('用户名或密码错误');
-    }
+    createProfile(trimmed);
+    navigate('/dashboard');
+  };
+
+  const handleSelectProfile = (profileId: string) => {
+    login(profileId);
+    navigate('/dashboard');
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <Link to="/" className="flex items-center justify-center gap-2 mb-6 text-text-muted hover:text-text-main transition-colors">
-          <ArrowLeft className="w-4 h-4" /> 返回首页
+    <div className="min-h-screen bg-background px-6 py-12 text-text-main">
+      <div className="mx-auto max-w-md">
+        <Link to="/" className="mb-8 flex items-center justify-center gap-2 text-text-muted transition-colors hover:text-text-main">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
         </Link>
-        <div className="flex justify-center items-center gap-2 mb-6">
-          <span className="font-bold text-2xl tracking-tight text-text-main">BackTrans</span>
+
+        <div className="mb-8 text-center">
+          <div className="mb-3 text-2xl font-bold tracking-tight">BackTrans</div>
+          <h1 className="text-3xl font-extrabold">进入本地学习档案</h1>
+          <p className="mt-3 text-sm leading-relaxed text-text-muted">
+            当前版本使用本地档案保存学习记录，不保存真实账号密码，也不会跨设备同步。
+          </p>
         </div>
-        <h2 className="text-center text-3xl font-extrabold text-text-main">
-          登录你的账号
-        </h2>
-      </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 mb-6 flex items-start gap-3">
-          <div className="text-warning mt-0.5">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-          </div>
-          <div className="text-sm text-text-main">
-            <strong>重要提示：</strong> 当前应用使用本地存储，账号及学习数据仅在当前设备的当前浏览器中有效，无法跨设备同步。清理浏览器缓存会导致数据丢失。
-          </div>
+        <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-relaxed text-text-main">
+          清理浏览器数据会删除本地档案。需要跨设备同步时，请先接入后端账号系统。
         </div>
-        <div className="bg-surface py-8 px-4 shadow sm:rounded-2xl sm:px-10 border border-border">
-          <form className="space-y-6" onSubmit={handleLogin}>
-            {error && (
-              <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-text-main">
-                用户名
-              </label>
-              <div className="mt-1">
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-border rounded-lg shadow-sm placeholder-text-muted focus:outline-none focus:ring-primary focus:border-primary bg-background text-text-main sm:text-sm"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-text-main">
-                密码
-              </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-border rounded-lg shadow-sm placeholder-text-muted focus:outline-none focus:ring-primary focus:border-primary bg-background text-text-main sm:text-sm"
-                />
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-background bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
-              >
-                登录
-              </button>
-            </div>
-          </form>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-surface text-text-muted">
-                  还没有账号？
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <Link
-                to="/register"
-                className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg shadow-sm text-sm font-medium text-text-main bg-background hover:bg-surface-hover transition-colors"
-              >
-                注册新账号
-              </Link>
+        {profiles.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-border bg-surface p-4">
+            <div className="mb-3 text-sm font-bold text-text-muted">已有档案</div>
+            <div className="space-y-2">
+              {profiles.map(profile => (
+                <button
+                  key={profile.id}
+                  onClick={() => handleSelectProfile(profile.id)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-primary/50"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/20 text-primary">
+                    <UserRound className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold">{profile.displayName}</div>
+                    <div className="text-xs text-text-muted">上次使用：{new Date(profile.lastActiveAt).toLocaleDateString('zh-CN')}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
-        </div>
+        )}
+
+        <form onSubmit={handleEnter} className="rounded-2xl border border-border bg-surface p-6">
+          <label htmlFor="profileName" className="block text-sm font-medium">
+            新建或进入档案
+          </label>
+          <input
+            id="profileName"
+            type="text"
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+            placeholder="例如：Aloofbear"
+            className="mt-2 block w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none transition-colors focus:border-primary"
+          />
+
+          {error && <div className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
+
+          <button
+            type="submit"
+            className="mt-5 w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-background transition-colors hover:bg-primary-hover"
+          >
+            进入学习
+          </button>
+        </form>
       </div>
     </div>
   );

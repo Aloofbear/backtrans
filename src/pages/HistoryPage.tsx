@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Search, Calendar, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getScopedStorageKey, readJson } from '../lib/storage';
+import type { PracticeHistoryRecord } from '../types/learning';
 
 export default function HistoryPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<PracticeHistoryRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
-    const userHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+    const historyKey = getScopedStorageKey('practiceHistory', user);
+    const userHistory = readJson<PracticeHistoryRecord[]>(historyKey, []);
     setHistory(userHistory);
   }, [user]);
 
@@ -26,8 +28,8 @@ export default function HistoryPage() {
   };
 
   const filteredHistory = history.filter(h => 
-    h.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    h.type.toLowerCase().includes(searchQuery.toLowerCase())
+    (h.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (h.type || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -87,7 +89,7 @@ export default function HistoryPage() {
             {filteredHistory.map((record) => (
               <Link 
                 key={record.id}
-                to={`/analysis/${record.id}`}
+                to={record.type === '回译' ? `/analysis/${record.id}` : (record.topicId ? `/short-sentence/${record.topicId}` : '/short-sentence')}
                 className="flex items-center justify-between p-5 hover:bg-surface-hover transition-colors group"
               >
                 <div className="flex items-center gap-4">

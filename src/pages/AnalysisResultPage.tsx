@@ -1,14 +1,25 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import Markdown from 'react-markdown';
-import { ArrowLeft, CheckCircle2, Sparkles, RefreshCcw, BookMarked, Share2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, BookMarked, CheckCircle2, Clipboard, RefreshCcw, Sparkles } from 'lucide-react';
 import { corpus, CorpusItem } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
+import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
+import FeedbackPanel from '../components/FeedbackPanel';
+import type { AnalysisFeedback, ErrorBookEntry, ExpressionItem, PracticeHistoryRecord } from '../types/learning';
 
 interface AnalysisData {
   item: CorpusItem;
   userTranslation: string;
-  feedback: string;
+  feedback: AnalysisFeedback | string;
+}
+
+function getExpressions(feedback: AnalysisFeedback | string): ExpressionItem[] {
+  if (typeof feedback === 'string') return [];
+  const unique = new Map<string, ExpressionItem>();
+  [...feedback.nativeExpressions, ...feedback.vocabulary].forEach(item => {
+    if (!unique.has(item.expression.toLowerCase())) unique.set(item.expression.toLowerCase(), item);
+  });
+  return Array.from(unique.values()).slice(0, 8);
 }
 
 export default function AnalysisResultPage() {
@@ -17,172 +28,174 @@ export default function AnalysisResultPage() {
   const { user } = useAuth();
   const [data, setData] = useState<AnalysisData | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const historyKey = user ? `practiceHistory_${user}` : 'practiceHistory_guest';
-    const allHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
-    // Try to find by history record ID (timestamp)
-    const historyItem = allHistory.find((h: any) => String(h.id) === id);
+    const historyKey = getScopedStorageKey('practiceHistory', user);
+    const allHistory = readJson<PracticeHistoryRecord[]>(historyKey, []);
+    const historyItem = allHistory.find(record => String(record.id) === id);
 
-    if (historyItem && historyItem.item && historyItem.feedback) {
+    if (historyItem?.item && historyItem.feedback) {
       setData({
         item: historyItem.item,
-        userTranslation: historyItem.userTranslation,
-        feedback: historyItem.feedback
+        userTranslation: historyItem.userTranslation || '',
+        feedback: historyItem.feedback,
       });
-    } else {
-      // Fallback 1: Check lastAnalysisResult (for immediate view after practice)
-      const savedData = localStorage.getItem('lastAnalysisResult');
-      if (savedData) {
-        try {
-          const parsed = JSON.parse(savedData);
-          // Match by corpus item ID or history timestamp
-          if (parsed.item.id === id || String(parsed.timestamp) === id) {
-            setData(parsed);
-            return;
-          }
-        } catch (e) {
-          console.error('Error parsing lastAnalysisResult:', e);
-        }
-      }
+      return;
+    }
 
-      // Fallback 2: If it's an old history item without full data, try to find the corpus item
-      if (historyItem) {
-        const corpusItem = corpus.find(c => c.id === historyItem.corpusId || c.chinese.includes(historyItem.title.replace('...', '')));
-        if (corpusItem) {
-          setData({
-            item: corpusItem,
-            userTranslation: historyItem.userTranslation || '（旧记录暂无翻译备份）',
-            feedback: historyItem.feedback || '（旧记录暂无分析备份）'
-          });
+    const savedData = localStorage.getItem('lastAnalysisResult');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        if (parsed.item?.id === id || String(parsed.timestamp) === id) {
+          setData(parsed);
           return;
         }
+      } catch (error) {
+        console.error('Error parsing lastAnalysisResult:', error);
       }
+    }
 
-      // Fallback 3: If id is a corpus item ID, show it with empty user data
-      const directCorpusItem = corpus.find(c => c.id === id);
-      if (directCorpusItem) {
+    if (historyItem) {
+      const corpusItem = corpus.find(c => c.id === historyItem.corpusId || c.chinese.includes(historyItem.title.replace('...', '')));
+      if (corpusItem) {
         setData({
-          item: directCorpusItem,
-          userTranslation: '',
-          feedback: ''
+          item: corpusItem,
+          userTranslation: historyItem.userTranslation || '（旧记录暂无翻译备份）',
+          feedback: historyItem.feedback || '（旧记录暂无分析备份）',
         });
         return;
       }
-
-      // If all fails, go back
-      navigate('/corpus');
     }
-  }, [id, navigate]);
+
+    const directCorpusItem = corpus.find(c => c.id === id);
+    if (directCorpusItem) {
+      setData({ item: directCorpusItem, userTranslation: '', feedback: '' });
+      return;
+    }
+
+    navigate('/history');
+  }, [id, navigate, user]);
 
   const handleSaveToErrorBook = () => {
     if (!data || isSaved) return;
-    
-    const errorBookKey = user ? `errorBook_${user}` : 'errorBook_guest';
-    const saved = localStorage.getItem(errorBookKey);
-    const errorItems = saved ? JSON.parse(saved) : [];
-    
-    const newItem = {
+
+    const errorBookKey = getScopedStorageKey('errorBook', user);
+    const errorItems = readJson<ErrorBookEntry[]>(errorBookKey, []);
+    const expressions = getExpressions(data.feedback);
+
+    const newItem: ErrorBookEntry = {
       id: Date.now(),
       type: 'translation',
+      corpusId: data.item.id,
+      corpusTitle: data.item.chinese.length > 20 ? `${data.item.chinese.substring(0, 20)}...` : data.item.chinese,
+      expressions,
       source: data.item.chinese,
       user: data.userTranslation,
       correction: data.item.english,
-      note: data.feedback.substring(0, 200) + '...', // Simplified note
-      date: new Date().toISOString().split('T')[0]
+      note: typeof data.feedback === 'string' ? data.feedback.substring(0, 200) : data.feedback.summary,
+      date: getTodayDateString(),
+      dueDate: getFutureDateString(1),
+      timesReviewed: 0,
+      status: 'new',
     };
-    
-    errorItems.unshift(newItem);
-    localStorage.setItem(errorBookKey, JSON.stringify(errorItems));
+
+    writeJson(errorBookKey, [newItem, ...errorItems]);
     setIsSaved(true);
+  };
+
+  const handleCopySummary = async () => {
+    if (!data) return;
+    const summary = typeof data.feedback === 'string' ? data.feedback : data.feedback.summary;
+    await navigator.clipboard.writeText(`BackTrans 练习总结\n\n${summary}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   if (!data) return <div className="p-10 text-center">Loading...</div>;
 
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8 pb-32">
-      {/* Header */}
+    <div className="mx-auto max-w-5xl space-y-8 p-6 pb-32 md:p-10">
       <div className="flex items-center justify-between">
-        <button 
-          onClick={() => navigate('/corpus')}
-          className="flex items-center gap-2 text-text-muted hover:text-text-main transition-colors"
+        <button
+          onClick={() => navigate('/history')}
+          className="flex items-center gap-2 text-text-muted transition-colors hover:text-text-main"
         >
-          <ArrowLeft className="w-4 h-4" /> 返回语料库
+          <ArrowLeft className="h-4 w-4" /> 返回记录
         </button>
         <div className="flex items-center gap-3">
-          <button className="p-2 text-text-muted hover:text-primary bg-surface border border-border rounded-lg transition-colors" title="分享">
-            <Share2 className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={handleSaveToErrorBook}
-            className={`p-2 rounded-lg transition-colors border ${isSaved ? 'text-purple-400 bg-purple-500/10 border-purple-500/30' : 'text-text-muted hover:text-purple-400 bg-surface border-border'}`} 
-            title={isSaved ? "已加入错题本" : "加入错题本"}
+          <button
+            onClick={handleCopySummary}
+            className="rounded-lg border border-border bg-surface p-2 text-text-muted transition-colors hover:text-primary"
+            title="复制总结"
           >
-            <BookMarked className="w-4 h-4" />
+            <Clipboard className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleSaveToErrorBook}
+            className={`rounded-lg border p-2 transition-colors ${
+              isSaved
+                ? 'border-purple-500/30 bg-purple-500/10 text-purple-400'
+                : 'border-border bg-surface text-text-muted hover:text-purple-400'
+            }`}
+            title={isSaved ? '已加入错题本' : '加入错题本'}
+          >
+            <BookMarked className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Texts */}
+      {copied && (
+        <div className="rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-success">
+          已复制练习总结
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-6">
-          {/* Original English */}
-          <div className="bg-surface border border-success/30 rounded-2xl p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-success/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
-            <div className="flex items-center gap-2 mb-4 relative z-10">
-              <CheckCircle2 className="w-5 h-5 text-success" />
+          <div className="relative overflow-hidden rounded-2xl border border-success/30 bg-surface p-6">
+            <div className="absolute right-0 top-0 h-32 w-32 translate-x-1/2 -translate-y-1/2 rounded-full bg-success/10 blur-2xl"></div>
+            <div className="relative z-10 mb-4 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-success" />
               <h3 className="font-bold text-success">地道原文 (Original)</h3>
             </div>
-            <p className="text-lg font-medium relative z-10 whitespace-pre-wrap">
-              {data.item.english}
-            </p>
+            <p className="relative z-10 whitespace-pre-wrap text-lg font-medium">{data.item.english}</p>
           </div>
 
-          {/* User Translation */}
-          <div className="bg-surface border border-border rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-4 text-text-muted">
-              <h3 className="font-bold text-sm">你的翻译 (Your Translation)</h3>
-            </div>
-            <p className="text-lg whitespace-pre-wrap">
-              {data.userTranslation}
-            </p>
+          <div className="rounded-2xl border border-border bg-surface p-6">
+            <h3 className="mb-4 text-sm font-bold text-text-muted">你的翻译 (Your Translation)</h3>
+            <p className="whitespace-pre-wrap text-lg">{data.userTranslation}</p>
           </div>
 
-          {/* Source Chinese */}
-          <div className="bg-background border border-border rounded-2xl p-6 opacity-70">
-            <div className="flex items-center gap-2 mb-2 text-text-muted">
-              <h3 className="font-bold text-xs uppercase tracking-wider">中文参考</h3>
-            </div>
-            <p className="text-sm whitespace-pre-wrap">
-              {data.item.chinese}
-            </p>
+          <div className="rounded-2xl border border-border bg-background p-6 opacity-80">
+            <h3 className="mb-2 text-xs font-bold uppercase text-text-muted">中文参考</h3>
+            <p className="whitespace-pre-wrap text-sm">{data.item.chinese}</p>
           </div>
         </div>
 
-        {/* Right Column: AI Feedback */}
-        <div className="bg-surface border border-primary/30 rounded-2xl p-6 md:p-8 shadow-[0_0_30px_rgba(0,216,255,0.05)] relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-          
-          <div className="flex items-center gap-2 mb-8 relative z-10">
-            <div className="bg-primary/20 p-2 rounded-lg text-primary">
-              <Sparkles className="w-5 h-5" />
+        <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-surface p-6 shadow-[0_0_30px_rgba(0,216,255,0.05)] md:p-8">
+          <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl"></div>
+
+          <div className="relative z-10 mb-8 flex items-center gap-2">
+            <div className="rounded-lg bg-primary/20 p-2 text-primary">
+              <Sparkles className="h-5 w-5" />
             </div>
-            <h2 className="text-xl font-bold">AI 深度解析</h2>
+            <h2 className="text-xl font-bold">分析结果</h2>
           </div>
-          
-          <div className="prose prose-invert prose-p:text-text-main prose-headings:text-text-main prose-a:text-primary hover:prose-a:text-primary-hover prose-strong:text-primary prose-code:text-pink-400 prose-code:bg-pink-400/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none max-w-none relative z-10">
-            <Markdown>{data.feedback}</Markdown>
+
+          <div className="relative z-10">
+            <FeedbackPanel feedback={data.feedback} />
           </div>
         </div>
       </div>
 
-      {/* Next Action */}
-      <div className="flex justify-center pt-8 border-t border-border/50">
+      <div className="flex justify-center border-t border-border/50 pt-8">
         <Link
           to="/corpus"
-          className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-background px-8 py-3.5 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(0,216,255,0.2)] hover:scale-105"
+          className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-background shadow-[0_0_20px_rgba(0,216,255,0.2)] transition-all hover:scale-105 hover:bg-primary-hover"
         >
-          <RefreshCcw className="w-5 h-5" />
+          <RefreshCcw className="h-5 w-5" />
           <span>继续下一篇</span>
         </Link>
       </div>
