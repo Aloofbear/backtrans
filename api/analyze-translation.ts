@@ -11,6 +11,8 @@ type ApiResponse = {
   end: () => void;
 };
 
+const DEFAULT_MAINLAND_API_BASE = 'http://8.163.84.238:8787';
+
 function asHeaderSafeOrigin(origin: string | undefined) {
   const cleaned = cleanEnvValue(origin);
   if (!cleaned) return undefined;
@@ -117,6 +119,37 @@ function extractJson(text: string) {
   throw new Error('Model response did not contain JSON.');
 }
 
+function getMainlandApiBase() {
+  const configured = cleanEnvValue(process.env.MAINLAND_API_BASE_URL);
+  if (configured === 'disabled') return undefined;
+  return (configured || DEFAULT_MAINLAND_API_BASE).replace(/\/$/, '');
+}
+
+async function forwardToMainlandApi(input: { chinese: unknown; english: unknown; userTranslation: unknown }) {
+  const apiBase = getMainlandApiBase();
+  if (!apiBase) return undefined;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000);
+
+  try {
+    const response = await fetch(`${apiBase}/api/analyze-translation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Mainland API returned ${response.status}`);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   setCors(req, res);
 
@@ -135,6 +168,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!chinese || !english || !userTranslation) {
     res.status(400).json({ error: 'chinese, english and userTranslation are required.' });
     return;
+  }
+
+  try {
+    const mainlandData = await forwardToMainlandApi({ chinese, english, userTranslation });
+    if (mainlandData) {
+      res.setHeader('X-BackTrans-Upstream', 'mainland-ecs');
+      res.json(mainlandData);
+      return;
+    }
+  } catch {
+    // Keep Vercel usable if the mainland ECS endpoint is temporarily unavailable.
   }
 
   const apiKey = cleanEnvValue(process.env.DEEPSEEK_API_KEY);
