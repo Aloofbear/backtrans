@@ -119,6 +119,15 @@ function extractJson(text: string) {
   throw new Error('Model response did not contain JSON.');
 }
 
+function parseRequestBody(body: unknown) {
+  if (typeof body !== 'string') return body;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return {};
+  }
+}
+
 function getMainlandApiBase() {
   const configured = cleanEnvValue(process.env.MAINLAND_API_BASE_URL);
   if (configured === 'disabled') return undefined;
@@ -163,7 +172,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const { chinese, english, userTranslation } = req.body ?? {};
+  const { chinese, english, userTranslation } = (parseRequestBody(req.body) as any) ?? {};
 
   if (!chinese || !english || !userTranslation) {
     res.status(400).json({ error: 'chinese, english and userTranslation are required.' });
