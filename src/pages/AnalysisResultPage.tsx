@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, BookMarked, CheckCircle2, Clipboard, RefreshCcw, Sparkles } from 'lucide-react';
 import { corpus, CorpusItem } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
-import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
+import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, readRawStorageItem, writeJson } from '../lib/storage';
 import FeedbackPanel from '../components/FeedbackPanel';
 import type { AnalysisFeedback, ErrorBookEntry, ExpressionItem, PracticeHistoryRecord } from '../types/learning';
 
@@ -44,7 +44,7 @@ export default function AnalysisResultPage() {
       return;
     }
 
-    const savedData = localStorage.getItem('lastAnalysisResult');
+    const savedData = readRawStorageItem('lastAnalysisResult');
     if (savedData) {
       try {
         const parsed = JSON.parse(savedData);

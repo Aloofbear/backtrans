@@ -1,11 +1,16 @@
 import express from 'express';
 import * as dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const distDir = path.join(rootDir, 'dist');
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -121,7 +126,11 @@ function extractJson(text: string) {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    aiConfigured: Boolean(cleanEnvValue(process.env.DEEPSEEK_API_KEY)),
+    mode: fs.existsSync(distDir) ? 'fullstack' : 'api-only',
+  });
 });
 
 app.post('/api/analyze-translation', async (req, res) => {
@@ -190,6 +199,18 @@ app.post('/api/analyze-translation', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`BackTrans API listening on http://localhost:${port}`);
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
+}
+
+app.listen(port, '0.0.0.0', () => {
+  const mode = fs.existsSync(distDir) ? 'app and API' : 'API only';
+  console.log(`BackTrans ${mode} listening on http://0.0.0.0:${port}`);
 });

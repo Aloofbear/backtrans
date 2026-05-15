@@ -171,14 +171,14 @@ export default function MainLayout() {
                       className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-text-main hover:bg-surface-hover rounded-lg transition-colors"
                     >
                       <User className="w-4 h-4" />
-                      登录已有账号
+                      选择本地档案
                     </Link>
                     <Link 
                       to="/register"
                       className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors font-medium"
                     >
                       <Edit3 className="w-4 h-4" />
-                      注册新账号
+                      创建本地档案
                     </Link>
                   </div>
                 )}

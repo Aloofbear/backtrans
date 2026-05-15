@@ -4,6 +4,7 @@ import {
   getProfiles,
   LearningProfile,
   migrateLegacyDataForProfile,
+  readRawStorageItem,
   setCurrentProfileId,
   touchProfile,
   upsertProfile,
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const legacyCurrentUser = localStorage.getItem('currentUser');
+    const legacyCurrentUser = readRawStorageItem('currentUser');
     if (legacyCurrentUser) {
       const legacyProfile = upsertProfile(legacyCurrentUser);
       setCurrentProfileId(legacyProfile.id);

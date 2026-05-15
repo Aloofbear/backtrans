@@ -10,7 +10,7 @@ export default function LandingPage() {
           <span className="font-bold text-xl tracking-tight">BackTrans</span>
         </div>
         <div className="flex items-center gap-6">
-          <Link to="/login" className="text-sm font-medium hover:text-primary transition-colors">登录</Link>
+          <Link to="/dashboard" className="text-sm font-medium hover:text-primary transition-colors">直接体验</Link>
           <Link to="/register" className="bg-primary hover:bg-primary-hover text-background px-5 py-2 rounded-full text-sm font-bold transition-colors">
             创建档案
           </Link>
@@ -143,7 +143,7 @@ export default function LandingPage() {
               创建本地档案
             </Link>
             <Link to="/login" className="px-8 py-3 rounded-full font-medium border border-border hover:bg-surface-hover transition-colors">
-              已有账号登录
+              选择本地档案
             </Link>
           </div>
         </div>

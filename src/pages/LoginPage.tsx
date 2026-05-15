@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserRound } from 'lucide-react';
+import { ArrowLeft, UserRound, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isPersistentStorageAvailable } from '../lib/storage';
 
 export default function LoginPage() {
   const [profileName, setProfileName] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { profiles, login, createProfile, refreshProfiles } = useAuth();
+  const storageAvailable = isPersistentStorageAvailable();
 
   useEffect(() => {
     refreshProfiles();
@@ -32,6 +34,10 @@ export default function LoginPage() {
     navigate('/dashboard');
   };
 
+  const handleGuestMode = () => {
+    navigate('/dashboard');
+  };
+
   return (
     <div className="min-h-screen bg-background px-6 py-12 text-text-main">
       <div className="mx-auto max-w-md">
@@ -43,13 +49,24 @@ export default function LoginPage() {
           <div className="mb-3 text-2xl font-bold tracking-tight">BackTrans</div>
           <h1 className="text-3xl font-extrabold">进入本地学习档案</h1>
           <p className="mt-3 text-sm leading-relaxed text-text-muted">
-            当前版本使用本地档案保存学习记录，不保存真实账号密码，也不会跨设备同步。
+            当前版本使用浏览器本地档案保存学习记录，不需要手机号、验证码或第三方登录。
           </p>
         </div>
 
         <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-relaxed text-text-main">
-          清理浏览器数据会删除本地档案。需要跨设备同步时，请先接入后端账号系统。
+          {storageAvailable
+            ? '清理浏览器数据会删除本地档案。大陆网络下也可直接进入，不依赖外部登录服务。'
+            : '当前浏览器限制了本地持久化存储，本次访问会使用临时会话档案，刷新或关闭页面后可能丢失。'}
         </div>
+
+        <button
+          type="button"
+          onClick={handleGuestMode}
+          className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/15"
+        >
+          <Zap className="h-4 w-4" />
+          无需登录，直接开始练习
+        </button>
 
         {profiles.length > 0 && (
           <div className="mb-6 rounded-2xl border border-border bg-surface p-4">
@@ -76,7 +93,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleEnter} className="rounded-2xl border border-border bg-surface p-6">
           <label htmlFor="profileName" className="block text-sm font-medium">
-            新建或进入档案
+            新建或进入本地档案
           </label>
           <input
             id="profileName"

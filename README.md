@@ -50,6 +50,7 @@ Vite proxies `/api` to `http://localhost:8787` in local development. If you do n
 
 ```bash
 VITE_API_BASE_URL="https://github-backtrans.vercel.app"
+VITE_API_BASE_URLS="https://api.your-domain.cn,https://github-backtrans.vercel.app"
 APP_ORIGIN="http://localhost:3000"
 DEEPSEEK_API_KEY="your-server-side-key"
 ```
@@ -79,6 +80,37 @@ If GitHub Pages should call the Vercel API, set `APP_ORIGIN` to include both ori
 
 ```bash
 APP_ORIGIN="https://github-backtrans.vercel.app,https://aloofbear.github.io"
+```
+
+## Mainland China Deployment
+
+For users in mainland China, do not rely on the browser calling `*.vercel.app` directly. Deploy the same repository to a mainland-accessible Node or Docker host, such as a Tencent Cloud Lighthouse server, Alibaba Cloud ECS, or another server with a domain reachable from mainland networks.
+
+Single-service deployment:
+
+```bash
+npm ci
+npm run build
+DEEPSEEK_API_KEY="your-server-side-key" npm run start
+```
+
+The production Node server serves both the Vite app and `/api/analyze-translation` from the same origin, so the browser no longer needs to call Vercel.
+
+Docker deployment:
+
+```bash
+docker build -t backtrans .
+docker run -p 8787:8787 \
+  -e DEEPSEEK_API_KEY="your-server-side-key" \
+  -e DEEPSEEK_MODEL="deepseek-chat" \
+  -e DEEPSEEK_API_URL="https://api.deepseek.com/chat/completions" \
+  backtrans
+```
+
+If the static frontend stays on GitHub Pages, build it with a mainland API first and Vercel as backup:
+
+```bash
+VITE_API_BASE_URLS="https://api.your-domain.cn,https://github-backtrans.vercel.app" npm run build
 ```
 
 After deployment, the frontend calls:

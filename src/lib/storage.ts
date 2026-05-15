@@ -7,6 +7,61 @@ export interface LearningProfile {
 
 const PROFILE_STORAGE_KEY = 'learningProfiles';
 const CURRENT_PROFILE_KEY = 'currentProfileId';
+const memoryStorage = new Map<string, string>();
+
+function getBrowserStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const storage = window.localStorage;
+    const testKey = '__backtrans_storage_test__';
+    storage.setItem(testKey, '1');
+    storage.removeItem(testKey);
+    return storage;
+  } catch {
+    return null;
+  }
+}
+
+export function isPersistentStorageAvailable() {
+  return Boolean(getBrowserStorage());
+}
+
+export function readRawStorageItem(key: string) {
+  const storage = getBrowserStorage();
+  if (storage) {
+    try {
+      return storage.getItem(key);
+    } catch {
+      return memoryStorage.get(key) ?? null;
+    }
+  }
+  return memoryStorage.get(key) ?? null;
+}
+
+export function writeRawStorageItem(key: string, value: string) {
+  const storage = getBrowserStorage();
+  if (storage) {
+    try {
+      storage.setItem(key, value);
+      return;
+    } catch {
+      // Fall through to session-only memory storage.
+    }
+  }
+  memoryStorage.set(key, value);
+}
+
+export function removeRawStorageItem(key: string) {
+  const storage = getBrowserStorage();
+  if (storage) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // Keep cleanup best-effort.
+    }
+  }
+  memoryStorage.delete(key);
+}
 
 export function safeJsonParse<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
@@ -18,11 +73,11 @@ export function safeJsonParse<T>(value: string | null, fallback: T): T {
 }
 
 export function readJson<T>(key: string, fallback: T): T {
-  return safeJsonParse(localStorage.getItem(key), fallback);
+  return safeJsonParse(readRawStorageItem(key), fallback);
 }
 
 export function writeJson<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
+  writeRawStorageItem(key, JSON.stringify(value));
 }
 
 export function normalizeProfileId(name: string) {
@@ -43,16 +98,16 @@ export function saveProfiles(profiles: LearningProfile[]) {
 }
 
 export function getCurrentProfileId() {
-  return localStorage.getItem(CURRENT_PROFILE_KEY);
+  return readRawStorageItem(CURRENT_PROFILE_KEY);
 }
 
 export function setCurrentProfileId(profileId: string | null) {
   if (profileId) {
-    localStorage.setItem(CURRENT_PROFILE_KEY, profileId);
-    localStorage.setItem('currentUser', profileId);
+    writeRawStorageItem(CURRENT_PROFILE_KEY, profileId);
+    writeRawStorageItem('currentUser', profileId);
   } else {
-    localStorage.removeItem(CURRENT_PROFILE_KEY);
-    localStorage.removeItem('currentUser');
+    removeRawStorageItem(CURRENT_PROFILE_KEY);
+    removeRawStorageItem('currentUser');
   }
 }
 
@@ -126,15 +181,15 @@ export function migrateLegacyDataForProfile(profileId: string) {
   migrateArray('practiceHistory', getScopedStorageKey('practiceHistory', profileId), item => item.userId === profileId);
 
   const completedKey = getScopedStorageKey('completedCorpusIds', profileId);
-  if (!localStorage.getItem(completedKey)) {
-    const legacyCompleted = localStorage.getItem('completedCorpusIds');
-    if (legacyCompleted) localStorage.setItem(completedKey, legacyCompleted);
+  if (!readRawStorageItem(completedKey)) {
+    const legacyCompleted = readRawStorageItem('completedCorpusIds');
+    if (legacyCompleted) writeRawStorageItem(completedKey, legacyCompleted);
   }
 
   const errorBookKey = getScopedStorageKey('errorBook', profileId);
-  if (!localStorage.getItem(errorBookKey)) {
-    const legacyErrorBook = localStorage.getItem('errorBook');
-    if (legacyErrorBook) localStorage.setItem(errorBookKey, legacyErrorBook);
+  if (!readRawStorageItem(errorBookKey)) {
+    const legacyErrorBook = readRawStorageItem('errorBook');
+    if (legacyErrorBook) writeRawStorageItem(errorBookKey, legacyErrorBook);
   }
 
   const legacyUsers = readJson<any[]>('users', []);
@@ -142,6 +197,6 @@ export function migrateLegacyDataForProfile(profileId: string) {
     legacyUsers.forEach(user => {
       if (user?.username) upsertProfile(user.username);
     });
-    localStorage.removeItem('users');
+    removeRawStorageItem('users');
   }
 }

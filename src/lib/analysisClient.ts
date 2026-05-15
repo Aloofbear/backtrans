@@ -15,6 +15,7 @@ const DEFAULT_DIMENSIONS = {
 };
 
 const DEFAULT_REMOTE_API_BASE = 'https://github-backtrans.vercel.app';
+const REQUEST_TIMEOUT_MS = 12000;
 
 function numberInRange(value: unknown, fallback: number) {
   const numberValue = Number(value);
@@ -77,33 +78,39 @@ export function normalizeFeedback(value: any, provider: AnalysisFeedback['provid
   };
 }
 
-function getApiEndpoint() {
-  const configuredBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-  if (configuredBase) {
-    return `${configuredBase}/api/analyze-translation`;
-  }
-
-  if (window.location.hostname.endsWith('github.io')) {
-    return `${DEFAULT_REMOTE_API_BASE}/api/analyze-translation`;
-  }
-
-  return '/api/analyze-translation';
+function splitApiBases(value: string | undefined) {
+  return (value || '')
+    .split(',')
+    .map(item => item.trim().replace(/\/$/, ''))
+    .filter(Boolean);
 }
 
-export async function analyzeTranslation(input: AnalyzeTranslationInput): Promise<AnalysisFeedback> {
-  const endpoint = getApiEndpoint();
-  if (!endpoint) {
-    return createLocalFeedback({
-      ...input,
-      warning: '当前 GitHub Pages 静态环境未配置 AI 后端，已切换为本地诊断。',
-    });
+function getApiEndpoints() {
+  const candidates = [
+    ...splitApiBases(import.meta.env.VITE_API_BASE_URLS),
+    ...splitApiBases(import.meta.env.VITE_API_BASE_URL),
+  ];
+
+  if (!window.location.hostname.endsWith('github.io')) {
+    candidates.push('');
   }
+  if (window.location.hostname.endsWith('github.io')) {
+    candidates.push(DEFAULT_REMOTE_API_BASE);
+  }
+
+  return Array.from(new Set(candidates)).map(base => `${base}/api/analyze-translation`);
+}
+
+async function postForAnalysis(endpoint: string, input: AnalyzeTranslationInput) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -111,12 +118,28 @@ export async function analyzeTranslation(input: AnalyzeTranslationInput): Promis
       throw new Error(errorText || `Request failed with ${response.status}`);
     }
 
-    const data = await response.json();
-    return normalizeFeedback(data.feedback ?? data, 'ai');
-  } catch (error: any) {
-    return createLocalFeedback({
-      ...input,
-      warning: `AI 分析接口暂不可用，已临时切换为本地诊断。当前请求地址：${endpoint}。原因：${error?.message || '未知错误'}`,
-    });
+    return response.json();
+  } finally {
+    window.clearTimeout(timeout);
   }
+}
+
+export async function analyzeTranslation(input: AnalyzeTranslationInput): Promise<AnalysisFeedback> {
+  const endpoints = getApiEndpoints();
+  const errors: string[] = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      const data = await postForAnalysis(endpoint, input);
+      return normalizeFeedback(data.feedback ?? data, 'ai');
+    } catch (error: any) {
+      const message = error?.name === 'AbortError' ? '请求超时' : error?.message || '未知错误';
+      errors.push(`${endpoint}: ${message}`);
+    }
+  }
+
+  return createLocalFeedback({
+    ...input,
+    warning: `AI 分析接口在当前网络下不可达，已临时切换为本地诊断。已尝试：${errors.join('；')}`,
+  });
 }

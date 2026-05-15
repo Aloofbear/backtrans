@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isPersistentStorageAvailable } from '../lib/storage';
 
 export default function RegisterPage() {
   const [profileName, setProfileName] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { createProfile } = useAuth();
+  const storageAvailable = isPersistentStorageAvailable();
 
   const handleCreate = (event: React.FormEvent) => {
     event.preventDefault();
@@ -34,12 +36,14 @@ export default function RegisterPage() {
           <div className="mb-3 text-2xl font-bold tracking-tight">BackTrans</div>
           <h1 className="text-3xl font-extrabold">创建本地学习档案</h1>
           <p className="mt-3 text-sm leading-relaxed text-text-muted">
-            用一个名称区分学习记录即可。当前版本不需要密码，也不会上传你的档案数据。
+            用一个名称区分学习记录即可。当前版本不需要密码、手机号或第三方登录，也不会上传你的档案数据。
           </p>
         </div>
 
         <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-relaxed">
-          本地档案适合个人练习和原型阶段。正式上线前应接入真实认证、云端同步、隐私授权和数据导出能力。
+          {storageAvailable
+            ? '本地档案保存在当前浏览器中，适合个人练习和原型阶段。'
+            : '当前浏览器限制了本地持久化存储，将使用临时会话档案；建议换用普通浏览器窗口以保存记录。'}
         </div>
 
         <form onSubmit={handleCreate} className="rounded-2xl border border-border bg-surface p-6">
