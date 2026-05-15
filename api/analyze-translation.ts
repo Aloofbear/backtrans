@@ -2,6 +2,7 @@ type ApiRequest = {
   method?: string;
   headers: Record<string, string | string[] | undefined>;
   body?: any;
+  on?: (event: string, callback: (...args: any[]) => void) => void;
 };
 
 type ApiResponse = {
@@ -119,13 +120,34 @@ function extractJson(text: string) {
   throw new Error('Model response did not contain JSON.');
 }
 
-function parseRequestBody(body: unknown) {
+function parseJsonLikeBody(body: unknown) {
+  if (Buffer.isBuffer(body)) {
+    return parseJsonLikeBody(body.toString('utf8'));
+  }
   if (typeof body !== 'string') return body;
   try {
     return JSON.parse(body);
   } catch {
     return {};
   }
+}
+
+async function parseRequestBody(req: ApiRequest) {
+  const parsedBody = parseJsonLikeBody(req.body);
+  if (parsedBody && typeof parsedBody === 'object') return parsedBody;
+
+  if (typeof req.on !== 'function') return {};
+
+  const rawBody = await new Promise<string>((resolve, reject) => {
+    let data = '';
+    req.on?.('data', chunk => {
+      data += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+    });
+    req.on?.('end', () => resolve(data));
+    req.on?.('error', reject);
+  });
+
+  return parseJsonLikeBody(rawBody);
 }
 
 function getMainlandApiBase() {
@@ -172,7 +194,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const { chinese, english, userTranslation } = (parseRequestBody(req.body) as any) ?? {};
+  const { chinese, english, userTranslation } = (await parseRequestBody(req) as any) ?? {};
 
   if (!chinese || !english || !userTranslation) {
     res.status(400).json({ error: 'chinese, english and userTranslation are required.' });
