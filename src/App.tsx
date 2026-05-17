@@ -10,6 +10,7 @@ import ShortSentenceTopicsPage from './pages/ShortSentenceTopicsPage';
 import ShortSentencePracticePage from './pages/ShortSentencePracticePage';
 import ErrorBookPage from './pages/ErrorBookPage';
 import HistoryPage from './pages/HistoryPage';
+import ReviewBacktranslationPage from './pages/ReviewBacktranslationPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/analysis/:id" element={<AnalysisResultPage />} />
             <Route path="/short-sentence" element={<ShortSentenceTopicsPage />} />
             <Route path="/short-sentence/:topicId" element={<ShortSentencePracticePage />} />
+            <Route path="/review" element={<ReviewBacktranslationPage />} />
             <Route path="/error-book" element={<ErrorBookPage />} />
             <Route path="/history" element={<HistoryPage />} />
           </Route>

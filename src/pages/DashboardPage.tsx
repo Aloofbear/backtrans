@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Edit3, BookMarked, TrendingUp, Clock, Target, ArrowRight, Flame } from 'lucide-react';
+import { BookOpen, Edit3, BookMarked, TrendingUp, Clock, Target, ArrowRight, Flame, RefreshCcw, BookmarkCheck, Trophy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getScopedStorageKey, readJson } from '../lib/storage';
-import type { ErrorBookEntry, PracticeHistoryRecord } from '../types/learning';
+import { buildAbilityProfile } from '../lib/learningProduct';
+import type { ErrorBookEntry, FavoriteExpression, PracticeHistoryRecord } from '../types/learning';
 
 const MOTIVATIONAL_QUOTES = [
   "Every word learned is a seed sown for the future.",
@@ -45,6 +46,7 @@ export default function DashboardPage() {
   const [todayCompleted, setTodayCompleted] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
   const [dueReviews, setDueReviews] = useState(0);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
     const historyKey = getScopedStorageKey('practiceHistory', user);
@@ -81,7 +83,9 @@ export default function DashboardPage() {
 
     const errorBookKey = getScopedStorageKey('errorBook', user);
     const errorBook = readJson<ErrorBookEntry[]>(errorBookKey, []);
+    const favorites = readJson<FavoriteExpression[]>(getScopedStorageKey('favoriteExpressions', user), []);
     setDueReviews(errorBook.filter(item => item.status !== 'mastered' && (!item.dueDate || item.dueDate <= todayStr)).length);
+    setProfile(buildAbilityProfile(userHistory, errorBook, favorites));
 
   }, [user]);
 
@@ -118,14 +122,14 @@ export default function DashboardPage() {
           >
             "{currentQuote}"
           </div>
-          <div className="flex gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
               <div className={`p-2 rounded-lg ${learningDays > 0 ? 'bg-orange-500/20 text-orange-500' : 'bg-surface-hover text-text-muted'}`}>
                 <Flame className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-sm text-text-muted">累计练习天数</div>
-                <div className="text-xl font-bold">{learningDays} 天</div>
+                <div className="text-sm text-text-muted">连续练习</div>
+                <div className="text-xl font-bold">{profile?.streakDays || 0} 天</div>
               </div>
             </div>
             <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
@@ -133,8 +137,8 @@ export default function DashboardPage() {
                 <Target className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-sm text-text-muted">今日目标完成度</div>
-                <div className="text-xl font-bold">{todayCompleted ? '100%' : '0%'}</div>
+                <div className="text-sm text-text-muted">本周完成</div>
+                <div className="text-xl font-bold">{profile?.weekCount || 0} 次</div>
               </div>
             </div>
             <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4">
@@ -183,7 +187,19 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          {/* Action Card 3 */}
+          <Link to="/review" className="group bg-surface border border-border rounded-2xl p-6 hover:border-purple-500/50 transition-all hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 group-hover:bg-purple-500/10 transition-colors"></div>
+            <div className="bg-purple-500/20 w-12 h-12 rounded-xl flex items-center justify-center text-purple-400 mb-6">
+              <RefreshCcw className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">复习回译</h3>
+            <p className="text-text-muted text-sm mb-6">从做过的语料里选一篇重译，检验表达是否真的被吸收。</p>
+            <div className="flex items-center text-purple-400 text-sm font-medium">
+              开始复习 <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* Action Card 4 */}
           <Link to="/error-book" className="group bg-surface border border-border rounded-2xl p-6 hover:border-purple-500/50 transition-all hover:-translate-y-1 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 group-hover:bg-purple-500/10 transition-colors"></div>
             <div className="bg-purple-500/20 w-12 h-12 rounded-xl flex items-center justify-center text-purple-400 mb-6">
@@ -197,6 +213,87 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {profile && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <section className="rounded-2xl border border-border bg-surface p-6 lg:col-span-2">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <h2 className="flex items-center gap-2 text-xl font-bold">
+                <Target className="h-5 w-5 text-primary" />
+                能力画像
+              </h2>
+              <div className="rounded-full border border-border bg-background px-3 py-1 text-sm text-text-muted">
+                均分 {profile.averageScore || 0}
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[
+                ['准确度', profile.dimensions.accuracy],
+                ['语法', profile.dimensions.grammar],
+                ['词汇', profile.dimensions.vocabulary],
+                ['自然度', profile.dimensions.naturalness],
+              ].map(([label, value]: any) => (
+                <div key={label} className="rounded-xl border border-border bg-background p-4">
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="text-text-muted">{label}</span>
+                    <span className="font-bold">{value || 0}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-surface-hover">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${value || 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+                <div className="mb-2 text-sm font-bold text-warning">优先补强</div>
+                <div className="space-y-1 text-sm text-text-muted">
+                  {profile.weakDimensions.map((item: any) => (
+                    <p key={item.key}>{item.key === 'accuracy' ? '准确度' : item.key === 'grammar' ? '语法' : item.key === 'vocabulary' ? '词汇' : '自然度'}：{item.value || 0}</p>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-4">
+                <div className="mb-2 text-sm font-bold">高频问题</div>
+                <div className="space-y-1 text-sm text-text-muted">
+                  {profile.topIssues.length > 0 ? profile.topIssues.map((item: any) => (
+                    <p key={item.title}>{item.title} · {item.count} 次</p>
+                  )) : <p>完成更多回译后会自动沉淀。</p>}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-surface p-6">
+            <h2 className="mb-6 flex items-center gap-2 text-xl font-bold">
+              <Trophy className="h-5 w-5 text-warning" />
+              成就与复习
+            </h2>
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border bg-background p-4">
+                <div className="text-sm text-text-muted">累计回译</div>
+                <div className="mt-1 text-2xl font-bold">{profile.translationCount} 次</div>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-4">
+                <div className="text-sm text-text-muted">复习回译</div>
+                <div className="mt-1 text-2xl font-bold text-purple-400">{profile.reviewCount} 次</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <BookmarkCheck className="mb-2 h-5 w-5 text-success" />
+                  <div className="text-xs text-text-muted">已掌握表达</div>
+                  <div className="text-xl font-bold">{profile.masteredExpressions}</div>
+                </div>
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <BookMarked className="mb-2 h-5 w-5 text-primary" />
+                  <div className="text-xs text-text-muted">收藏好句</div>
+                  <div className="text-xl font-bold">{profile.favoriteExpressions}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* Recent Activity & Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

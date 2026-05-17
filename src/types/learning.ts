@@ -51,6 +51,8 @@ export interface PracticeHistoryRecord {
   userTranslation?: string;
   feedback?: AnalysisFeedback | string;
   isCorrect?: boolean;
+  mode?: 'practice' | 'review';
+  sourceHistoryId?: number;
 }
 
 export interface ErrorBookEntry {
@@ -69,3 +71,11 @@ export interface ErrorBookEntry {
   status: 'new' | 'reviewing' | 'mastered';
 }
 
+export interface FavoriteExpression {
+  id: number;
+  expression: string;
+  meaning: string;
+  reason?: string;
+  sourceTitle?: string;
+  createdAt: string;
+}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail } from 'lucide-react';
+import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail, RefreshCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -39,6 +39,7 @@ export default function MainLayout() {
   const navItems = [
     { path: '/dashboard', label: '主页', icon: <div className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-primary" /></div> },
     { path: '/corpus', label: '回译训练', icon: <BookOpen className="w-4 h-4" /> },
+    { path: '/review', label: '复习回译', icon: <RefreshCcw className="w-4 h-4" /> },
     { path: '/short-sentence', label: '短句训练', icon: <Edit3 className="w-4 h-4" /> },
     { path: '/error-book', label: '错题本', icon: <BookMarked className="w-4 h-4" /> },
   ];
@@ -46,7 +47,7 @@ export default function MainLayout() {
   return (
     <div className="min-h-screen flex flex-col pb-20 md:pb-0">
       {/* Top Navigation Bar */}
-      <header className="h-16 border-b border-border bg-surface/50 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-6">
+      <header className="h-16 border-b border-border bg-surface/50 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-3 sm:px-6">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2">
             <span className="font-bold text-xl tracking-tight">BackTrans</span>
@@ -194,7 +195,7 @@ export default function MainLayout() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 px-2 py-2 backdrop-blur md:hidden">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {navItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
@@ -202,7 +203,7 @@ export default function MainLayout() {
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors",
+                  "flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium transition-colors sm:text-xs",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-text-muted hover:bg-surface-hover hover:text-text-main"

@@ -16,6 +16,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { analyzeTranslation } from '../lib/analysisClient';
 import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
+import { getCorpusInsight, getDraftKey } from '../lib/learningProduct';
 import { corpus, CorpusItem } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackPanel from '../components/FeedbackPanel';
@@ -44,6 +45,7 @@ export default function TranslationPracticePage() {
   const [feedback, setFeedback] = useState<AnalysisFeedback | null>(null);
   const [error, setError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState('');
   const resultRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -51,10 +53,27 @@ export default function TranslationPracticePage() {
     const foundItem = corpus.find(c => c.id === id);
     if (foundItem) {
       setItem(foundItem);
+      const draft = readJson<{ text: string; updatedAt: string }>(getDraftKey(foundItem.id, user), { text: '', updatedAt: '' });
+      if (draft.text) {
+        setUserTranslation(draft.text);
+        setDraftSavedAt(draft.updatedAt);
+      }
     } else {
       navigate('/corpus');
     }
-  }, [id, navigate]);
+  }, [id, navigate, user]);
+
+  useEffect(() => {
+    if (!item || showOriginal) return;
+    const timeout = window.setTimeout(() => {
+      const text = userTranslation.trim();
+      if (!text) return;
+      const updatedAt = new Date().toISOString();
+      writeJson(getDraftKey(item.id, user), { text: userTranslation, updatedAt });
+      setDraftSavedAt(updatedAt);
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [item, showOriginal, user, userTranslation]);
 
   const saveToErrorBook = (analysis: AnalysisFeedback, auto = false) => {
     if (!item) return false;
@@ -76,7 +95,7 @@ export default function TranslationPracticePage() {
       correction: item.english,
       note: analysis.summary,
       date: getTodayDateString(),
-      dueDate: getFutureDateString(auto ? 1 : 0),
+      dueDate: getFutureDateString(auto ? 7 : 0),
       timesReviewed: 0,
       status: 'new',
     };
@@ -138,6 +157,7 @@ export default function TranslationPracticePage() {
         feedback: analysis,
         timestamp: historyId,
       });
+      writeJson(getDraftKey(item.id, user), { text: '', updatedAt: new Date().toISOString() });
     } catch (err: any) {
       setError(`分析时发生错误：${err?.message || '未知错误'}`);
     } finally {
@@ -158,10 +178,12 @@ export default function TranslationPracticePage() {
   };
 
   if (!item) return <div className="p-10 text-center">Loading...</div>;
+  const insight = getCorpusInsight(item);
+  const progress = Math.min(100, Math.round((userTranslation.trim().length / Math.max(80, item.english.length * 0.55)) * 100));
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-6 pb-32 md:p-10">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <button
           onClick={() => navigate('/corpus')}
           className="flex items-center gap-2 text-text-muted transition-colors hover:text-text-main"
@@ -171,6 +193,20 @@ export default function TranslationPracticePage() {
         <div className="rounded-full border border-border bg-surface px-3 py-1 text-sm font-medium text-text-muted">
           回译训练模式
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          ['预计', `${insight.estimatedMinutes} 分钟`],
+          ['篇幅', insight.lengthLabel],
+          ['难度', insight.difficultyLabel],
+          ['重点', insight.goalLabel],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-xs text-text-muted">{label}</div>
+            <div className="mt-1 font-bold">{value}</div>
+          </div>
+        ))}
       </div>
 
       {error && (
@@ -222,8 +258,11 @@ export default function TranslationPracticePage() {
             />
 
             <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
-              <span>Enter 换行 / Ctrl + Enter 提交</span>
-              <span>{userTranslation.length} 字符</span>
+              <span>{draftSavedAt ? '草稿已自动保存' : 'Enter 换行 / Ctrl + Enter 提交'}</span>
+              <span>完成度 {progress}% · {userTranslation.length} 字符</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
             </div>
 
             {!showOriginal && (
@@ -292,7 +331,7 @@ export default function TranslationPracticePage() {
                     <p className="animate-pulse">正在分析你的翻译...</p>
                   </div>
                 ) : (
-                  feedback && <FeedbackPanel feedback={feedback} />
+                  feedback && <FeedbackPanel feedback={feedback} userId={user} sourceTitle={item.chinese.substring(0, 24)} />
                 )}
               </div>
             </div>

@@ -185,7 +185,11 @@ export default function AnalysisResultPage() {
           </div>
 
           <div className="relative z-10">
-            <FeedbackPanel feedback={data.feedback} />
+            <FeedbackPanel
+              feedback={data.feedback}
+              userId={user}
+              sourceTitle={data.item.chinese.substring(0, 24)}
+            />
           </div>
         </div>
       </div>

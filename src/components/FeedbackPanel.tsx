@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import Markdown from 'react-markdown';
-import { AlertCircle, CheckCircle2, Lightbulb, Sparkles, Target } from 'lucide-react';
-import type { AnalysisFeedback } from '../types/learning';
+import { AlertCircle, BookmarkPlus, CheckCircle2, ChevronDown, ChevronUp, Lightbulb, Sparkles, Target } from 'lucide-react';
+import { saveFavoriteExpression } from '../lib/learningProduct';
+import type { AnalysisFeedback, ExpressionItem } from '../types/learning';
 
 interface FeedbackPanelProps {
   feedback: AnalysisFeedback | string;
+  userId?: string | null;
+  sourceTitle?: string;
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
@@ -20,52 +24,15 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default function FeedbackPanel({ feedback }: FeedbackPanelProps) {
-  if (typeof feedback === 'string') {
-    return (
-      <div className="prose prose-invert prose-p:text-text-main prose-headings:text-text-main prose-strong:text-primary max-w-none">
-        <Markdown>{feedback}</Markdown>
-      </div>
-    );
-  }
-
+function DetailSections({
+  feedback,
+  onFavorite,
+}: {
+  feedback: AnalysisFeedback;
+  onFavorite: (item: ExpressionItem) => void;
+}) {
   return (
-    <div className="space-y-6">
-      {feedback.warning && (
-        <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-          <p>{feedback.warning}</p>
-        </div>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-[160px_1fr]">
-        <div className="rounded-2xl border border-primary/30 bg-background p-5 text-center">
-          <div className="text-xs font-medium uppercase text-text-muted">综合分</div>
-          <div className="mt-2 text-5xl font-bold text-primary">{feedback.overallScore}</div>
-          <div className="mt-1 text-xs text-text-muted">{feedback.provider === 'ai' ? 'AI 评分' : '本地诊断'}</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-background p-5">
-          <div className="mb-4 flex items-center gap-2 font-bold">
-            <Sparkles className="h-5 w-5 text-primary" />
-            分项能力
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ScoreBar label="准确度" value={feedback.dimensions.accuracy} />
-            <ScoreBar label="语法" value={feedback.dimensions.grammar} />
-            <ScoreBar label="词汇" value={feedback.dimensions.vocabulary} />
-            <ScoreBar label="自然度" value={feedback.dimensions.naturalness} />
-          </div>
-        </div>
-      </div>
-
-      <section className="rounded-2xl border border-border bg-background p-5">
-        <div className="mb-3 flex items-center gap-2 font-bold">
-          <Target className="h-5 w-5 text-primary" />
-          总体诊断
-        </div>
-        <p className="leading-relaxed text-text-main">{feedback.summary}</p>
-      </section>
-
+    <>
       {feedback.strengths.length > 0 && (
         <section className="rounded-2xl border border-success/30 bg-success/5 p-5">
           <div className="mb-3 flex items-center gap-2 font-bold text-success">
@@ -108,11 +75,7 @@ export default function FeedbackPanel({ feedback }: FeedbackPanelProps) {
             <div className="mb-3 font-bold">地道表达</div>
             <div className="space-y-3">
               {feedback.nativeExpressions.map((item, index) => (
-                <div key={index} className="rounded-xl border border-border bg-surface p-3">
-                  <div className="font-bold text-primary">{item.expression}</div>
-                  <div className="mt-1 text-sm">{item.meaning}</div>
-                  {item.reason && <div className="mt-1 text-xs text-text-muted">{item.reason}</div>}
-                </div>
+                <ExpressionCard key={index} item={item} onFavorite={onFavorite} />
               ))}
             </div>
           </section>
@@ -123,10 +86,7 @@ export default function FeedbackPanel({ feedback }: FeedbackPanelProps) {
             <div className="mb-3 font-bold">重要表达与生词</div>
             <div className="space-y-3">
               {feedback.vocabulary.map((item, index) => (
-                <div key={index} className="rounded-xl border border-border bg-surface p-3">
-                  <div className="font-bold text-primary">{item.expression}</div>
-                  <div className="mt-1 text-sm">{item.meaning}</div>
-                </div>
+                <ExpressionCard key={index} item={item} onFavorite={onFavorite} compact />
               ))}
             </div>
           </section>
@@ -146,7 +106,127 @@ export default function FeedbackPanel({ feedback }: FeedbackPanelProps) {
           </div>
         </section>
       )}
+    </>
+  );
+}
+
+function ExpressionCard({ item, onFavorite, compact = false }: { item: ExpressionItem; onFavorite: (item: ExpressionItem) => void; compact?: boolean }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-bold text-primary">{item.expression}</div>
+          <div className="mt-1 text-sm">{item.meaning}</div>
+          {!compact && item.reason && <div className="mt-1 text-xs text-text-muted">{item.reason}</div>}
+        </div>
+        <button
+          type="button"
+          onClick={() => onFavorite(item)}
+          className="shrink-0 rounded-lg border border-border p-2 text-text-muted transition-colors hover:border-primary/40 hover:text-primary"
+          title="收藏表达"
+        >
+          <BookmarkPlus className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
 
+export default function FeedbackPanel({ feedback, userId, sourceTitle }: FeedbackPanelProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [favoriteToast, setFavoriteToast] = useState('');
+
+  if (typeof feedback === 'string') {
+    return (
+      <div className="prose prose-invert prose-p:text-text-main prose-headings:text-text-main prose-strong:text-primary max-w-none">
+        <Markdown>{feedback}</Markdown>
+      </div>
+    );
+  }
+
+  const topIssues = feedback.issues.slice(0, 3);
+  const handleFavorite = (item: ExpressionItem) => {
+    saveFavoriteExpression(userId, item, sourceTitle);
+    setFavoriteToast(`已收藏：${item.expression}`);
+    window.setTimeout(() => setFavoriteToast(''), 1600);
+  };
+
+  return (
+    <div className="space-y-6">
+      {feedback.warning && (
+        <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <p>{feedback.warning}</p>
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-[160px_1fr]">
+        <div className="rounded-2xl border border-primary/30 bg-background p-5 text-center">
+          <div className="text-xs font-medium uppercase text-text-muted">综合分</div>
+          <div className="mt-2 text-5xl font-bold text-primary">{feedback.overallScore}</div>
+          <div className="mt-1 text-xs text-text-muted">{feedback.provider === 'ai' ? 'AI 评分' : '本地诊断'}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-background p-5">
+          <div className="mb-4 flex items-center gap-2 font-bold">
+            <Sparkles className="h-5 w-5 text-primary" />
+            分项能力
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ScoreBar label="准确度" value={feedback.dimensions.accuracy} />
+            <ScoreBar label="语法" value={feedback.dimensions.grammar} />
+            <ScoreBar label="词汇" value={feedback.dimensions.vocabulary} />
+            <ScoreBar label="自然度" value={feedback.dimensions.naturalness} />
+          </div>
+        </div>
+      </div>
+
+      <section className="rounded-2xl border border-border bg-background p-5">
+        <div className="mb-3 flex items-center gap-2 font-bold">
+          <Target className="h-5 w-5 text-primary" />
+          一句话诊断
+        </div>
+        <p className="leading-relaxed text-text-main">{feedback.summary}</p>
+      </section>
+
+      {topIssues.length > 0 && (
+        <section className="rounded-2xl border border-warning/30 bg-warning/5 p-5">
+          <div className="mb-3 flex items-center gap-2 font-bold text-warning">
+            <AlertCircle className="h-5 w-5" />
+            优先改这 {topIssues.length} 处
+          </div>
+          <div className="space-y-3">
+            {topIssues.map((issue, index) => (
+              <div key={index} className="rounded-xl border border-border bg-background p-4">
+                <div className="mb-1 font-bold">{issue.title}</div>
+                {issue.suggestion && <div className="text-sm text-primary">建议：{issue.suggestion}</div>}
+                <p className="mt-1 text-sm text-text-muted">{issue.explanation}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {favoriteToast && (
+        <div className="rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-success">
+          {favoriteToast}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3 text-sm font-bold text-text-main transition-colors hover:border-primary/40 hover:text-primary"
+      >
+        {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {expanded ? '收起详情' : '展开详细分析'}
+      </button>
+
+      {expanded && (
+        <DetailSections
+          feedback={feedback}
+          onFavorite={handleFavorite}
+        />
+      )}
+    </div>
+  );
+}
