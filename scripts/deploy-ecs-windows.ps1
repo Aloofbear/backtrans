@@ -98,7 +98,13 @@ Set-Location "$root"
   $taskArg = '-NoProfile -ExecutionPolicy Bypass -File "' + $startPath + '"'
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $taskArg
   $trigger = New-ScheduledTaskTrigger -AtStartup
-  Register-ScheduledTask -TaskName 'BackTrans' -Action $action -Trigger $trigger -RunLevel Highest -User 'SYSTEM' -Force | Out-Null
+  $settings = New-ScheduledTaskSettingsSet `
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1)
+
+  Register-ScheduledTask -TaskName 'BackTrans' -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -User 'SYSTEM' -Force | Out-Null
   Start-ScheduledTask -TaskName 'BackTrans'
 }
 
