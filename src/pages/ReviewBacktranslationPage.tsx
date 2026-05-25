@@ -5,6 +5,7 @@ import { analyzeTranslation } from '../lib/analysisClient';
 import { useAuth } from '../contexts/AuthContext';
 import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
 import { getReviewableTranslationRecords } from '../lib/learningProduct';
+import { trackEvent } from '../lib/analytics';
 import FeedbackPanel from '../components/FeedbackPanel';
 import type { AnalysisFeedback, ErrorBookEntry, ExpressionItem, PracticeHistoryRecord } from '../types/learning';
 
@@ -43,6 +44,12 @@ export default function ReviewBacktranslationPage() {
     setIsSubmitting(true);
     setFeedback(null);
     setError('');
+    const submitStartedAt = performance.now();
+    trackEvent('review_submit', {
+      corpusId: item.id,
+      sourceHistoryId: selectedRecord?.id || null,
+      length: translation.trim().length,
+    }, user);
 
     try {
       const analysis = await analyzeTranslation({
@@ -52,6 +59,14 @@ export default function ReviewBacktranslationPage() {
       });
 
       setFeedback(analysis);
+      trackEvent('ai_feedback_success', {
+        corpusId: item.id,
+        mode: 'review',
+        provider: analysis.provider,
+        score: analysis.overallScore,
+        issueCount: analysis.issues.length,
+        durationMs: Math.round(performance.now() - submitStartedAt),
+      }, user);
       const historyKey = getScopedStorageKey('practiceHistory', user);
       const allHistory = readJson<PracticeHistoryRecord[]>(historyKey, []);
       const historyId = Date.now();
@@ -93,6 +108,11 @@ export default function ReviewBacktranslationPage() {
         }, ...errorBook]);
       }
     } catch (err: any) {
+      trackEvent('ai_feedback_failed', {
+        corpusId: item.id,
+        mode: 'review',
+        durationMs: Math.round(performance.now() - submitStartedAt),
+      }, user);
       setError(`复习分析失败：${err?.message || '未知错误'}`);
     } finally {
       setIsSubmitting(false);
@@ -144,6 +164,11 @@ export default function ReviewBacktranslationPage() {
               <button
                 key={record.id}
                 onClick={() => {
+                  trackEvent('review_material_select', {
+                    corpusId: record.corpusId || null,
+                    score: record.score,
+                    sourceHistoryId: record.id,
+                  }, user);
                   setSelectedId(String(record.id));
                   setTranslation('');
                   setFeedback(null);

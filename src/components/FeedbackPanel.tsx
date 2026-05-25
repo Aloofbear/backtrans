@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Markdown from 'react-markdown';
 import { AlertCircle, BookmarkPlus, CheckCircle2, ChevronDown, ChevronUp, Lightbulb, Sparkles, Target } from 'lucide-react';
 import { saveFavoriteExpression } from '../lib/learningProduct';
+import { trackEvent } from '../lib/analytics';
 import type { AnalysisFeedback, ExpressionItem } from '../types/learning';
 
 interface FeedbackPanelProps {
@@ -147,6 +148,12 @@ export default function FeedbackPanel({ feedback, userId, sourceTitle }: Feedbac
   const topIssues = feedback.issues.slice(0, 3);
   const handleFavorite = (item: ExpressionItem) => {
     saveFavoriteExpression(userId, item, sourceTitle);
+    trackEvent('expression_favorite', {
+      provider: feedback.provider,
+      score: feedback.overallScore,
+      expressionLength: item.expression.length,
+      hasReason: Boolean(item.reason),
+    }, userId);
     setFavoriteToast(`已收藏：${item.expression}`);
     window.setTimeout(() => setFavoriteToast(''), 1600);
   };
@@ -214,7 +221,18 @@ export default function FeedbackPanel({ feedback, userId, sourceTitle }: Feedbac
 
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          if (!expanded) {
+            trackEvent('feedback_expand', {
+              provider: feedback.provider,
+              score: feedback.overallScore,
+              issueCount: feedback.issues.length,
+              nativeExpressionCount: feedback.nativeExpressions.length,
+              vocabularyCount: feedback.vocabulary.length,
+            }, userId);
+          }
+          setExpanded(!expanded);
+        }}
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-3 text-sm font-bold text-text-main transition-colors hover:border-primary/40 hover:text-primary"
       >
         {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

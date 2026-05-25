@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail, RefreshCcw } from 'lucide-react';
+import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail, RefreshCcw, BarChart3 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -99,6 +99,14 @@ export default function MainLayout() {
                     <a href="mailto:wtifimyf@gmail.com" className="text-sm text-blue-500 hover:underline">
                       wtifimyf@gmail.com
                     </a>
+                    <Link
+                      to="/analytics"
+                      onClick={() => setShowSettings(false)}
+                      className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold text-text-main transition-colors hover:border-primary/40 hover:text-primary"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      产品数据看板
+                    </Link>
                     <p className="mt-3 text-xs leading-relaxed text-text-muted">
                       当前版本采用本地学习档案。AI 分析需连接后端代理，不会在前端保存 API Key。
                     </p>

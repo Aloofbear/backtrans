@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, XCircle, Lightbulb, ArrowRight, BookMarked, Bo
 import { useAuth } from '../contexts/AuthContext';
 import { shortSentences, shortSentenceTopics } from '../data/shortSentenceCorpus';
 import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
+import { trackEvent } from '../lib/analytics';
 import type { ErrorBookEntry, PracticeHistoryRecord } from '../types/learning';
 
 export default function ShortSentencePracticePage() {
@@ -180,6 +181,7 @@ export default function ShortSentencePracticePage() {
 
   const handleSubmit = () => {
     if (userInputs.some(input => input.trim() === '')) return;
+    const currentSentence = sentences[currentIndex];
     
     let correct = true;
     blanks.forEach((blank, i) => {
@@ -190,18 +192,24 @@ export default function ShortSentencePracticePage() {
     
     setIsCorrect(correct);
     setIsSubmitted(true);
+    trackEvent('short_sentence_submit', {
+      topicId: topicId || currentSentence.topicId,
+      sentenceId: currentSentence.id,
+      isCorrect: correct,
+      blankCount: blanks.length,
+      index: currentIndex + 1,
+    }, user);
 
     // Increment encounter count
     const countsKey = getScopedStorageKey('sentenceCounts', user);
     const counts = readJson<Record<string, number>>(countsKey, {});
-    const currentSentenceId = sentences[currentIndex].id;
+    const currentSentenceId = currentSentence.id;
     counts[currentSentenceId] = (counts[currentSentenceId] || 0) + 1;
     writeJson(countsKey, counts);
 
     // Save to history
     const historyKey = getScopedStorageKey('practiceHistory', user);
     const history = readJson<PracticeHistoryRecord[]>(historyKey, []);
-    const currentSentence = sentences[currentIndex];
     const record: PracticeHistoryRecord = {
       id: Date.now(),
       userId: user || 'guest',
@@ -261,6 +269,10 @@ export default function ShortSentencePracticePage() {
     };
     
     writeJson(errorBookKey, [newItem, ...errorItems]);
+    trackEvent('short_sentence_errorbook_add', {
+      topicId: topicId || currentSentence.topicId,
+      sentenceId: currentSentence.id,
+    }, user);
     setIsSaved(true);
   };
 

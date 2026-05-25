@@ -5,6 +5,7 @@ import { corpus, corpusTopics } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
 import { getScopedStorageKey, readJson } from '../lib/storage';
 import { DifficultyFilter, GoalFilter, LengthFilter, getCorpusInsight } from '../lib/learningProduct';
+import { trackEvent } from '../lib/analytics';
 
 const difficultyOptions: { value: DifficultyFilter; label: string }[] = [
   { value: 'all', label: '全部难度' },
@@ -53,6 +54,14 @@ export default function CorpusSelectPage() {
 
   const handleTopicSelect = (topicId: string) => {
     setError('');
+    trackEvent('corpus_topic_select', {
+      topicId,
+      matchedCount: filteredCorpus.length,
+      uncompletedCount: filteredCorpus.filter(item => !completedIds.includes(item.id)).length,
+      difficulty: difficultyFilter,
+      length: lengthFilter,
+      goal: goalFilter,
+    }, user);
     
     const topicCorpus = filteredCorpus.filter(c => topicId === 'all' || c.topicId === topicId);
     
@@ -86,7 +95,16 @@ export default function CorpusSelectPage() {
           <p className="text-text-muted">选择一个主题，系统将为您随机抽取一篇未练习过的语料。</p>
         </div>
         <button
-          onClick={() => handleTopicSelect('all')}
+          onClick={() => {
+            trackEvent('quick_start_click', {
+              matchedCount: filteredCorpus.length,
+              uncompletedCount: filteredCorpus.filter(item => !completedIds.includes(item.id)).length,
+              difficulty: difficultyFilter,
+              length: lengthFilter,
+              goal: goalFilter,
+            }, user);
+            handleTopicSelect('all');
+          }}
           className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-bold text-background transition-colors hover:bg-primary-hover"
         >
           <Timer className="h-4 w-4" />
@@ -100,17 +118,33 @@ export default function CorpusSelectPage() {
           训练筛选
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <select value={topicFilter} onChange={event => setTopicFilter(event.target.value)} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
+          <select value={topicFilter} onChange={event => {
+            const value = event.target.value;
+            setTopicFilter(value);
+            trackEvent('corpus_filter_change', { filter: 'topic', value }, user);
+          }} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
             <option value="all">全部主题</option>
             {corpusTopics.map(topic => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
           </select>
-          <select value={difficultyFilter} onChange={event => setDifficultyFilter(event.target.value as DifficultyFilter)} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
+          <select value={difficultyFilter} onChange={event => {
+            const value = event.target.value as DifficultyFilter;
+            setDifficultyFilter(value);
+            trackEvent('corpus_filter_change', { filter: 'difficulty', value }, user);
+          }} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
             {difficultyOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <select value={lengthFilter} onChange={event => setLengthFilter(event.target.value as LengthFilter)} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
+          <select value={lengthFilter} onChange={event => {
+            const value = event.target.value as LengthFilter;
+            setLengthFilter(value);
+            trackEvent('corpus_filter_change', { filter: 'length', value }, user);
+          }} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
             {lengthOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <select value={goalFilter} onChange={event => setGoalFilter(event.target.value as GoalFilter)} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
+          <select value={goalFilter} onChange={event => {
+            const value = event.target.value as GoalFilter;
+            setGoalFilter(value);
+            trackEvent('corpus_filter_change', { filter: 'goal', value }, user);
+          }} className="rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary/50">
             {goalOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </div>

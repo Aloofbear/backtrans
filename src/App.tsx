@@ -13,11 +13,14 @@ import HistoryPage from './pages/HistoryPage';
 import ReviewBacktranslationPage from './pages/ReviewBacktranslationPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import AnalyticsTracker from './components/AnalyticsTracker';
 
 export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
+        <AnalyticsTracker />
         <Routes>
           {/* Entry Routes */}
           <Route path="/" element={<LandingPage />} />
@@ -35,6 +38,7 @@ export default function App() {
             <Route path="/review" element={<ReviewBacktranslationPage />} />
             <Route path="/error-book" element={<ErrorBookPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
           </Route>
 
           {/* Fallback */}

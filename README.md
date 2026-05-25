@@ -18,6 +18,7 @@ GitHub Pages mirror: https://aloofbear.github.io/backtrans/
 - Frontend: React, Vite, Tailwind CSS, React Router.
 - AI proxy: Vercel serverless API routes in `api/` for production, plus `server/index.ts` as a local development proxy.
 - Persistence: browser `localStorage` scoped by local learning profile.
+- Product analytics: first-party event tracking through `/api/events`, stored on the ECS/Node server as `data/events.jsonl`, with a built-in `/analytics` dashboard.
 - Static hosting: GitHub Pages can serve the app, but AI feedback requires a deployed API proxy.
 
 ## Local Development
@@ -96,6 +97,15 @@ DEEPSEEK_API_KEY="your-server-side-key" npm run start
 
 The production Node server serves both the Vite app and `/api/analyze-translation` from the same origin, so the browser no longer needs to call Vercel.
 
+The same server also stores product analytics events:
+
+```text
+POST /api/events
+GET  /api/analytics/summary?days=30
+```
+
+The `/analytics` page shows the training funnel, AI success rate, feedback expansion rate, favorite rate, review usage, daily trend, and top corpus submissions. HTTPS frontends can send analytics through the Vercel proxy, which forwards events to the mainland ECS endpoint.
+
 Docker deployment:
 
 ```bash
@@ -137,4 +147,4 @@ npm run qa:corpus  # corpus sanity checks
 - Add export/import for local learning records.
 - Add spaced repetition scheduling by expression-level mastery.
 - Add source attribution and review workflow for corpus content.
-- Track product events such as practice started, feedback generated, and review completed.
+- Add cohort retention and experiment comparison on top of the first-party analytics event log.

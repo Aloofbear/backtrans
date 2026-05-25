@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Edit3, ArrowRight, Briefcase, Coffee, Plane, Heart, Zap, BookOpen } from 'lucide-react';
 import { shortSentenceTopics } from '../data/shortSentenceCorpus';
+import { trackEvent } from '../lib/analytics';
 
 export default function ShortSentenceTopicsPage() {
   const topics = shortSentenceTopics;
@@ -36,6 +37,10 @@ export default function ShortSentenceTopicsPage() {
             <Link 
               key={topic.id} 
               to={`/short-sentence/${topic.id}`}
+              onClick={() => trackEvent('short_sentence_topic_select', {
+                topicId: topic.id,
+                count: topic.count,
+              })}
               className="bg-surface border border-border rounded-2xl p-6 hover:border-blue-500/50 transition-all hover:-translate-y-1 group flex flex-col"
             >
               <div className="flex items-center justify-between mb-6">

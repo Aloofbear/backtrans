@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { analyzeTranslation } from '../lib/analysisClient';
 import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
 import { getCorpusInsight, getDraftKey } from '../lib/learningProduct';
+import { trackEvent } from '../lib/analytics';
 import { corpus, CorpusItem } from '../data/corpus';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackPanel from '../components/FeedbackPanel';
@@ -48,11 +49,24 @@ export default function TranslationPracticePage() {
   const [draftSavedAt, setDraftSavedAt] = useState('');
   const resultRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const practiceStartedAtRef = useRef<number>(0);
+  const trackedProgressBucketRef = useRef<number>(0);
 
   useEffect(() => {
     const foundItem = corpus.find(c => c.id === id);
     if (foundItem) {
       setItem(foundItem);
+      const insight = getCorpusInsight(foundItem);
+      practiceStartedAtRef.current = performance.now();
+      trackedProgressBucketRef.current = 0;
+      trackEvent('practice_start', {
+        corpusId: foundItem.id,
+        topicId: foundItem.topicId,
+        difficulty: insight.difficulty,
+        length: insight.length,
+        goal: insight.goal,
+        estimatedMinutes: insight.estimatedMinutes,
+      }, user);
       const draft = readJson<{ text: string; updatedAt: string }>(getDraftKey(foundItem.id, user), { text: '', updatedAt: '' });
       if (draft.text) {
         setUserTranslation(draft.text);
@@ -62,6 +76,23 @@ export default function TranslationPracticePage() {
       navigate('/corpus');
     }
   }, [id, navigate, user]);
+
+  useEffect(() => {
+    if (!item || showOriginal) return;
+    const textLength = userTranslation.trim().length;
+    if (!textLength) return;
+    const currentProgress = Math.min(100, Math.round((textLength / Math.max(80, item.english.length * 0.55)) * 100));
+    const bucket = Math.floor(currentProgress / 25) * 25;
+    if (bucket >= 25 && bucket > trackedProgressBucketRef.current) {
+      trackedProgressBucketRef.current = bucket;
+      trackEvent('translation_draft_progress', {
+        corpusId: item.id,
+        progress: bucket,
+        length: textLength,
+        elapsedSeconds: Math.round((performance.now() - practiceStartedAtRef.current) / 1000),
+      }, user);
+    }
+  }, [item, showOriginal, user, userTranslation]);
 
   useEffect(() => {
     if (!item || showOriginal) return;
@@ -113,6 +144,17 @@ export default function TranslationPracticePage() {
     setError('');
     setFeedback(null);
     setIsSaved(false);
+    const submitStartedAt = performance.now();
+    const insight = getCorpusInsight(item);
+    const submitProgress = Math.min(100, Math.round((userTranslation.trim().length / Math.max(80, item.english.length * 0.55)) * 100));
+    trackEvent('translation_submit', {
+      corpusId: item.id,
+      topicId: item.topicId,
+      difficulty: insight.difficulty,
+      length: userTranslation.trim().length,
+      progress: submitProgress,
+      elapsedSeconds: Math.round((submitStartedAt - practiceStartedAtRef.current) / 1000),
+    }, user);
 
     setTimeout(() => {
       resultRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -126,6 +168,14 @@ export default function TranslationPracticePage() {
       });
 
       setFeedback(analysis);
+      trackEvent('ai_feedback_success', {
+        corpusId: item.id,
+        mode: 'practice',
+        provider: analysis.provider,
+        score: analysis.overallScore,
+        issueCount: analysis.issues.length,
+        durationMs: Math.round(performance.now() - submitStartedAt),
+      }, user);
 
       const completedKey = getScopedStorageKey('completedCorpusIds', user);
       const completedIds = readJson<string[]>(completedKey, []);
@@ -159,6 +209,11 @@ export default function TranslationPracticePage() {
       });
       writeJson(getDraftKey(item.id, user), { text: '', updatedAt: new Date().toISOString() });
     } catch (err: any) {
+      trackEvent('ai_feedback_failed', {
+        corpusId: item.id,
+        mode: 'practice',
+        durationMs: Math.round(performance.now() - submitStartedAt),
+      }, user);
       setError(`分析时发生错误：${err?.message || '未知错误'}`);
     } finally {
       setIsSubmitting(false);

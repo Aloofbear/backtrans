@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BookMarked, BookOpen, ChevronDown, ChevronUp, Search, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFutureDateString, getScopedStorageKey, getTodayDateString, readJson, writeJson } from '../lib/storage';
+import { trackEvent } from '../lib/analytics';
 import type { ErrorBookEntry } from '../types/learning';
 
 function getExpressionText(expression: any) {
@@ -41,6 +42,13 @@ export default function ErrorBookPage() {
   };
 
   const handleReview = (id: number, mastered = false) => {
+    const item = errorItems.find(entry => entry.id === id);
+    trackEvent('errorbook_review', {
+      entryType: item?.type || 'unknown',
+      expressionCount: item?.expressions?.length || 0,
+      mastered,
+      previousTimesReviewed: item?.timesReviewed || 0,
+    }, user);
     persistItems(errorItems.map(item => {
       if (item.id !== id) return item;
       const nextReviewGap = Math.min(14, Math.max(1, (item.timesReviewed || 0) + 1) * 2);
