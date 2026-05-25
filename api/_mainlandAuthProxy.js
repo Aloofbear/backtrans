@@ -1,24 +1,10 @@
-export type ApiRequest = {
-  method?: string;
-  headers: Record<string, string | string[] | undefined>;
-  body?: any;
-  on?: (event: string, callback: (...args: any[]) => void) => void;
-};
-
-export type ApiResponse = {
-  setHeader: (name: string, value: string | string[]) => void;
-  status: (code: number) => ApiResponse;
-  json: (body: unknown) => void;
-  end: () => void;
-};
-
 const DEFAULT_MAINLAND_API_BASE = 'http://8.163.84.238:8787';
 
-function cleanEnvValue(value: string | undefined) {
+function cleanEnvValue(value) {
   return value?.replace(/^\uFEFF/, '').trim();
 }
 
-function asHeaderSafeOrigin(origin: string | undefined) {
+function asHeaderSafeOrigin(origin) {
   const cleaned = cleanEnvValue(origin);
   if (!cleaned) return undefined;
   if (cleaned === '*') return cleaned;
@@ -26,15 +12,15 @@ function asHeaderSafeOrigin(origin: string | undefined) {
   return cleaned;
 }
 
-function setCors(req: ApiRequest, res: ApiResponse, methods: string[]) {
+function setCors(req, res, methods) {
   const requestOrigin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
   const configuredOrigins = (process.env.APP_ORIGIN ?? '')
     .split(',')
     .map(asHeaderSafeOrigin)
-    .filter((origin): origin is string => Boolean(origin));
+    .filter(Boolean);
   const safeRequestOrigin = asHeaderSafeOrigin(requestOrigin);
   const allowedOrigin =
-    configuredOrigins.find((origin) => origin === safeRequestOrigin || origin === '*') ??
+    configuredOrigins.find(origin => origin === safeRequestOrigin || origin === '*') ??
     configuredOrigins[0] ??
     safeRequestOrigin ??
     '*';
@@ -48,7 +34,7 @@ function setCors(req: ApiRequest, res: ApiResponse, methods: string[]) {
   }
 }
 
-function parseJsonLikeBody(body: unknown) {
+function parseJsonLikeBody(body) {
   if (Buffer.isBuffer(body)) {
     return parseJsonLikeBody(body.toString('utf8'));
   }
@@ -60,13 +46,13 @@ function parseJsonLikeBody(body: unknown) {
   }
 }
 
-async function parseRequestBody(req: ApiRequest) {
+async function parseRequestBody(req) {
   const parsedBody = parseJsonLikeBody(req.body);
   if (parsedBody && typeof parsedBody === 'object') return parsedBody;
 
   if (typeof req.on !== 'function') return {};
 
-  const rawBody = await new Promise<string>((resolve, reject) => {
+  const rawBody = await new Promise((resolve, reject) => {
     let data = '';
     req.on?.('data', chunk => {
       data += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
@@ -84,18 +70,18 @@ function getMainlandApiBase() {
   return (configured || DEFAULT_MAINLAND_API_BASE).replace(/\/$/, '');
 }
 
-function getHeader(req: ApiRequest, name: string) {
+function getHeader(req, name) {
   const value = req.headers[name] ?? req.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
 }
 
-function relaySetCookie(response: Response, res: ApiResponse) {
-  const normalizeCookie = (cookie: string) => {
+function relaySetCookie(response, res) {
+  const normalizeCookie = cookie => {
     let next = cookie.replace(/;\s*SameSite=Lax/i, '; SameSite=None');
     if (!/;\s*Secure/i.test(next)) next += '; Secure';
     return next;
   };
-  const getSetCookie = (response.headers as any).getSetCookie?.bind(response.headers);
+  const getSetCookie = response.headers.getSetCookie?.bind(response.headers);
   const cookies = getSetCookie ? getSetCookie() : response.headers.get('set-cookie');
   if (Array.isArray(cookies) && cookies.length > 0) {
     res.setHeader('Set-Cookie', cookies.map(normalizeCookie));
@@ -104,7 +90,7 @@ function relaySetCookie(response: Response, res: ApiResponse) {
   }
 }
 
-export async function proxyMainlandRequest(req: ApiRequest, res: ApiResponse, path: string, methods: string[]) {
+export async function proxyMainlandRequest(req, res, path, methods) {
   setCors(req, res, [...methods, 'OPTIONS']);
 
   if (req.method === 'OPTIONS') {
@@ -123,13 +109,13 @@ export async function proxyMainlandRequest(req: ApiRequest, res: ApiResponse, pa
     return;
   }
 
-  const headers: Record<string, string> = {};
+  const headers = {};
   const cookie = getHeader(req, 'cookie');
   const authorization = getHeader(req, 'authorization');
   if (cookie) headers.Cookie = cookie;
   if (authorization) headers.Authorization = authorization;
 
-  const options: RequestInit = { method: req.method, headers };
+  const options = { method: req.method, headers };
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(await parseRequestBody(req));
