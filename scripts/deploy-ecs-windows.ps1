@@ -12,6 +12,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $root = 'C:\backtrans'
+$analyticsDir = 'C:\backtrans-data'
 $tools = 'C:\tools'
 $nodeVersion = 'v24.15.0'
 $nodeName = "node-$nodeVersion-win-x64"
@@ -70,10 +71,13 @@ function Install-Node {
 }
 
 function Write-AppEnv {
+  New-Item -ItemType Directory -Force -Path $analyticsDir | Out-Null
+
   $envLines = @(
     "DEEPSEEK_API_KEY=$DeepSeekApiKey",
     'DEEPSEEK_MODEL=deepseek-chat',
     'DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions',
+    "ANALYTICS_DIR=$analyticsDir",
     'APP_ORIGIN=*',
     "PORT=$Port"
   )
