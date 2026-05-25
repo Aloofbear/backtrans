@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { Activity, BarChart3, Clock, RefreshCcw, TrendingUp, Users } from 'lucide-react';
 import { fetchAnalyticsSummary } from '../lib/analytics';
+
+const ADMIN_TOKEN_STORAGE_KEY = 'backtransAnalyticsAdminToken';
 
 type AnalyticsSummary = {
   generatedAt: string;
@@ -47,17 +49,27 @@ function formatMs(value: number) {
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
+  const [adminToken, setAdminToken] = useState(() => window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '');
+  const [tokenInput, setTokenInput] = useState('');
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(adminToken));
   const [error, setError] = useState('');
 
   const loadSummary = async () => {
+    if (!adminToken) return;
     setIsLoading(true);
     setError('');
     try {
-      setSummary(await fetchAnalyticsSummary(days));
+      setSummary(await fetchAnalyticsSummary(days, adminToken));
     } catch (err: any) {
-      setError(err?.message || '数据加载失败');
+      if (String(err?.message || '').includes('401')) {
+        window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+        setAdminToken('');
+        setSummary(null);
+        setError('访问码不正确或已失效。');
+      } else {
+        setError(err?.message || '数据加载失败');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -65,7 +77,26 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     loadSummary();
-  }, [days]);
+  }, [adminToken, days]);
+
+  const handleUnlock = (event: FormEvent) => {
+    event.preventDefault();
+    const token = tokenInput.trim();
+    if (!token) {
+      setError('请输入管理员访问码。');
+      return;
+    }
+    window.sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+    setAdminToken(token);
+    setTokenInput('');
+  };
+
+  const handleLock = () => {
+    window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    setAdminToken('');
+    setSummary(null);
+    setError('');
+  };
 
   const maxDailyEvents = Math.max(1, ...(summary?.daily || []).map(item => item.events));
   const eventRows = Object.entries(summary?.countByEvent || {})
@@ -111,12 +142,48 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {isLoading && !summary ? (
+      {!adminToken ? (
+        <form onSubmit={handleUnlock} className="mx-auto max-w-md rounded-2xl border border-border bg-surface p-6">
+          <div className="mb-4 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20 text-primary">
+              <BarChart3 className="h-6 w-6" />
+            </div>
+            <h2 className="text-xl font-bold">管理员访问</h2>
+            <p className="mt-2 text-sm leading-relaxed text-text-muted">
+              产品数据只对管理员开放。请输入访问码后查看漏斗与埋点数据。
+            </p>
+          </div>
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={event => setTokenInput(event.target.value)}
+            placeholder="输入管理员访问码"
+            className="w-full rounded-xl border border-border bg-background px-4 py-3 outline-none transition-colors focus:border-primary/50"
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="mt-4 w-full rounded-xl bg-primary px-4 py-3 font-bold text-background transition-colors hover:bg-primary-hover"
+          >
+            查看数据看板
+          </button>
+        </form>
+      ) : isLoading && !summary ? (
         <div className="rounded-2xl border border-border bg-surface p-12 text-center text-text-muted">
           正在加载数据...
         </div>
       ) : summary && (
         <>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleLock}
+              className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold text-text-muted transition-colors hover:text-danger"
+            >
+              退出管理员看板
+            </button>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="事件总量" value={summary.totals.events} icon={<Activity className="h-5 w-5" />} />
             <StatCard label="访问会话" value={summary.totals.sessions} icon={<Users className="h-5 w-5" />} />

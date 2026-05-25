@@ -4,6 +4,8 @@ param(
 
   [int]$Port = 8787,
 
+  [string]$AnalyticsAdminToken = '',
+
   [string]$RepoZipUrl = 'https://github.com/Aloofbear/backtrans/archive/refs/heads/main.zip'
 )
 
@@ -78,6 +80,7 @@ function Write-AppEnv {
     'DEEPSEEK_MODEL=deepseek-chat',
     'DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions',
     "ANALYTICS_DIR=$analyticsDir",
+    "ANALYTICS_ADMIN_TOKEN=$AnalyticsAdminToken",
     'APP_ORIGIN=*',
     "PORT=$Port"
   )

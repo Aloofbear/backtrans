@@ -71,6 +71,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const rawDays = Array.isArray(req.query?.days) ? req.query?.days[0] : req.query?.days;
   const days = encodeURIComponent(rawDays || '30');
-  const response = await fetch(`${apiBase}/api/analytics/summary?days=${days}`);
+  const authHeader = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
+  const response = await fetch(`${apiBase}/api/analytics/summary?days=${days}`, {
+    headers: authHeader ? { Authorization: authHeader } : undefined,
+  });
   res.status(response.status).json(await response.json());
 }

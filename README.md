@@ -106,6 +106,8 @@ GET  /api/analytics/summary?days=30
 
 The `/analytics` page shows the training funnel, AI success rate, feedback expansion rate, favorite rate, review usage, daily trend, and top corpus submissions. HTTPS frontends can send analytics through the Vercel proxy, which forwards events to the mainland ECS endpoint.
 
+Set `ANALYTICS_ADMIN_TOKEN` on the server to protect the analytics dashboard and summary API. Without this token, `GET /api/analytics/summary` returns `401`, and the `/analytics` page only shows an admin access prompt.
+
 Docker deployment:
 
 ```bash

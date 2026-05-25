@@ -226,6 +226,16 @@ function normalizeAnalyticsEvent(req: express.Request) {
   } satisfies AnalyticsEvent;
 }
 
+function isAnalyticsAdmin(req: express.Request) {
+  const token = cleanEnvValue(process.env.ANALYTICS_ADMIN_TOKEN);
+  if (!token) return false;
+
+  const authHeader = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
+  const bearerToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const queryToken = typeof req.query.adminToken === 'string' ? req.query.adminToken.trim() : '';
+  return bearerToken === token || queryToken === token;
+}
+
 function appendAnalyticsEvent(event: AnalyticsEvent) {
   fs.mkdirSync(analyticsDir, { recursive: true });
   fs.appendFileSync(analyticsEventsPath, `${JSON.stringify(event)}\n`, 'utf8');
@@ -350,6 +360,11 @@ app.post('/api/events', (req, res) => {
 });
 
 app.get('/api/analytics/summary', (req, res) => {
+  if (!isAnalyticsAdmin(req)) {
+    res.status(401).json({ error: 'Analytics admin token is required.' });
+    return;
+  }
+
   const days = Number(req.query.days || 30);
   res.json(summarizeAnalytics(Number.isFinite(days) ? days : 30));
 });

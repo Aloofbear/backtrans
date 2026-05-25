@@ -102,13 +102,15 @@ export function trackEvent(event: string, properties: AnalyticsProperties = {}, 
   }
 }
 
-export async function fetchAnalyticsSummary(days = 30) {
+export async function fetchAnalyticsSummary(days = 30, adminToken = '') {
   const endpoints = getEndpoint(`/api/analytics/summary?days=${days}`);
   const errors: string[] = [];
 
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint);
+      const response = await fetch(endpoint, {
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined,
+      });
       if (!response.ok) throw new Error(`Request failed with ${response.status}`);
       return response.json();
     } catch (error: any) {
