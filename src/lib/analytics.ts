@@ -109,6 +109,7 @@ export async function fetchAnalyticsSummary(days = 30, adminToken = '') {
   for (const endpoint of endpoints) {
     try {
       const response = await fetch(endpoint, {
+        credentials: 'include',
         headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined,
       });
       if (!response.ok) throw new Error(`Request failed with ${response.status}`);

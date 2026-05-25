@@ -1,7 +1,8 @@
 import express from 'express';
 import * as dotenv from 'dotenv';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,6 +15,9 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const distDir = path.join(rootDir, 'dist');
 const analyticsDir = cleanEnvValue(process.env.ANALYTICS_DIR) || path.join(rootDir, 'data');
 const analyticsEventsPath = path.join(analyticsDir, 'events.jsonl');
+const appDbPath = cleanEnvValue(process.env.APP_DB_PATH) || path.join(analyticsDir, 'backtrans.db');
+const require = createRequire(import.meta.url);
+const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (filename: string) => any };
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -45,7 +49,10 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  if (allowedOrigin !== '*') {
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
   if (req.method === 'OPTIONS') {
     res.sendStatus(204);
     return;
@@ -182,6 +189,249 @@ function sanitizeProperties(value: unknown): Record<string, unknown> {
   return result;
 }
 
+type AuthUser = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: 'admin' | 'user';
+};
+
+type SessionUser = AuthUser & {
+  sessionId: string;
+};
+
+let appDb: any;
+
+function getDb() {
+  if (appDb) return appDb;
+
+  fs.mkdirSync(path.dirname(appDbPath), { recursive: true });
+  appDb = new DatabaseSync(appDbPath);
+  appDb.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      device_name TEXT,
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS user_data (
+      user_id TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+  `);
+  ensureInitialAdmin();
+  return appDb;
+}
+
+function normalizeUsername(value: unknown) {
+  const username = sanitizeString(value, 40).toLowerCase();
+  if (!/^[a-z0-9_.@-]{3,40}$/.test(username)) {
+    throw new Error('用户名需为 3-40 位，可使用英文、数字、点、下划线、短横线或 @。');
+  }
+  return username;
+}
+
+function normalizeConfiguredUsername(value: unknown) {
+  try {
+    return normalizeUsername(value);
+  } catch {
+    return '';
+  }
+}
+
+function validatePassword(value: unknown) {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 72) {
+    throw new Error('密码需为 8-72 位。');
+  }
+  return value;
+}
+
+function hashPassword(password: string, salt = randomBytes(16).toString('hex')) {
+  const passwordHash = scryptSync(password, salt, 64).toString('hex');
+  return { passwordHash, passwordSalt: salt };
+}
+
+function verifyPassword(password: string, row: any) {
+  const expected = Buffer.from(String(row.password_hash || ''), 'hex');
+  const actual = scryptSync(password, String(row.password_salt || ''), 64);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function tokenHash(token: string) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function parseCookies(req: express.Request) {
+  const cookieHeader = Array.isArray(req.headers.cookie) ? req.headers.cookie[0] : req.headers.cookie;
+  return Object.fromEntries(
+    String(cookieHeader || '')
+      .split(';')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => {
+        const separator = part.indexOf('=');
+        const key = separator >= 0 ? part.slice(0, separator) : part;
+        const value = separator >= 0 ? part.slice(separator + 1) : '';
+        return [key, decodeURIComponent(value)];
+      })
+  );
+}
+
+function getSessionCookieName() {
+  return cleanEnvValue(process.env.SESSION_COOKIE_NAME) || 'backtrans_session';
+}
+
+function isSecureRequest(req: express.Request) {
+  const proto = Array.isArray(req.headers['x-forwarded-proto']) ? req.headers['x-forwarded-proto'][0] : req.headers['x-forwarded-proto'];
+  return req.secure || proto === 'https';
+}
+
+function setSessionCookie(req: express.Request, res: express.Response, token: string, expiresAt: string) {
+  const maxAge = Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000));
+  const parts = [
+    `${getSessionCookieName()}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAge}`,
+  ];
+  if (isSecureRequest(req)) parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearSessionCookie(res: express.Response) {
+  res.setHeader('Set-Cookie', `${getSessionCookieName()}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function mapAuthUser(row: any): AuthUser {
+  return {
+    id: String(row.id),
+    username: String(row.username),
+    displayName: String(row.display_name ?? row.displayName ?? row.username),
+    role: row.role === 'admin' ? 'admin' : 'user',
+  };
+}
+
+function countUsers() {
+  return Number(getDb().prepare('SELECT COUNT(*) AS count FROM users').get()?.count || 0);
+}
+
+function adminExists() {
+  return Boolean(getDb().prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get());
+}
+
+function chooseRoleForNewUser(username: string): 'admin' | 'user' {
+  const configuredAdmin = normalizeConfiguredUsername(process.env.ADMIN_USERNAME);
+  if (configuredAdmin) {
+    return username === configuredAdmin && !adminExists() ? 'admin' : 'user';
+  }
+  return countUsers() === 0 ? 'admin' : 'user';
+}
+
+function ensureInitialAdmin() {
+  const username = normalizeConfiguredUsername(process.env.ADMIN_USERNAME);
+  const password = cleanEnvValue(process.env.ADMIN_INITIAL_PASSWORD);
+  if (!appDb || !username || !password) return;
+
+  const displayName = sanitizeString(process.env.ADMIN_DISPLAY_NAME, 40) || username;
+  const existing = appDb.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    if (existing.role !== 'admin') {
+      appDb.prepare("UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?").run(now, existing.id);
+    }
+    return;
+  }
+
+  const { passwordHash, passwordSalt } = hashPassword(password);
+  appDb.prepare(`
+    INSERT INTO users (id, username, display_name, password_hash, password_salt, role, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'admin', ?, ?)
+  `).run(randomUUID(), username, displayName, passwordHash, passwordSalt, now, now);
+}
+
+function createSession(userId: string, req: express.Request) {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const token = randomBytes(32).toString('base64url');
+  const userAgent = Array.isArray(req.headers['user-agent']) ? req.headers['user-agent'][0] : req.headers['user-agent'];
+  const deviceName = sanitizeString(req.body?.deviceName, 80) || sanitizeString(userAgent, 80) || 'web';
+
+  getDb().prepare(`
+    INSERT INTO sessions (id, user_id, token_hash, device_name, created_at, last_seen_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(randomUUID(), userId, tokenHash(token), deviceName, now.toISOString(), now.toISOString(), expiresAt);
+
+  return { token, expiresAt };
+}
+
+function getCurrentSessionUser(req: express.Request): SessionUser | null {
+  const token = parseCookies(req)[getSessionCookieName()];
+  if (!token) return null;
+
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT
+      sessions.id AS session_id,
+      sessions.expires_at,
+      users.id,
+      users.username,
+      users.display_name,
+      users.role
+    FROM sessions
+    JOIN users ON users.id = sessions.user_id
+    WHERE sessions.token_hash = ?
+  `).get(tokenHash(token));
+
+  if (!row) return null;
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(row.session_id);
+    return null;
+  }
+
+  db.prepare('UPDATE sessions SET last_seen_at = ? WHERE id = ?').run(new Date().toISOString(), row.session_id);
+  return { ...mapAuthUser(row), sessionId: String(row.session_id) };
+}
+
+function requireSession(req: express.Request, res: express.Response) {
+  const user = getCurrentSessionUser(req);
+  if (!user) {
+    res.status(401).json({ error: '请先登录云端账号。' });
+    return null;
+  }
+  return user;
+}
+
+function sanitizeUserDataPayload(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const serialized = JSON.stringify(value);
+  if (Buffer.byteLength(serialized, 'utf8') > 512 * 1024) {
+    throw new Error('同步数据过大，请先清理本地学习记录。');
+  }
+  return JSON.parse(serialized);
+}
+
 function getClientIp(req: express.Request) {
   const forwarded = req.headers['x-forwarded-for'];
   const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
@@ -228,12 +478,11 @@ function normalizeAnalyticsEvent(req: express.Request) {
 
 function isAnalyticsAdmin(req: express.Request) {
   const token = cleanEnvValue(process.env.ANALYTICS_ADMIN_TOKEN);
-  if (!token) return false;
-
   const authHeader = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
   const bearerToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   const queryToken = typeof req.query.adminToken === 'string' ? req.query.adminToken.trim() : '';
-  return bearerToken === token || queryToken === token;
+  if (token && (bearerToken === token || queryToken === token)) return true;
+  return getCurrentSessionUser(req)?.role === 'admin';
 }
 
 function appendAnalyticsEvent(event: AnalyticsEvent) {
@@ -342,11 +591,111 @@ function summarizeAnalytics(days: number) {
 }
 
 app.get('/api/health', (_req, res) => {
+  getDb();
   res.json({
     ok: true,
     aiConfigured: Boolean(cleanEnvValue(process.env.DEEPSEEK_API_KEY)),
+    accountsConfigured: true,
     mode: fs.existsSync(distDir) ? 'fullstack' : 'api-only',
   });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const user = getCurrentSessionUser(req);
+  res.json(user ? { authenticated: true, user: mapAuthUser(user) } : { authenticated: false, user: null });
+});
+
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const username = normalizeUsername(req.body?.username);
+    const password = validatePassword(req.body?.password);
+    const displayName = sanitizeString(req.body?.displayName, 40) || username;
+    const role = chooseRoleForNewUser(username);
+    const now = new Date().toISOString();
+    const { passwordHash, passwordSalt } = hashPassword(password);
+    const userId = randomUUID();
+
+    getDb().prepare(`
+      INSERT INTO users (id, username, display_name, password_hash, password_salt, role, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, username, displayName, passwordHash, passwordSalt, role, now, now);
+
+    const session = createSession(userId, req);
+    setSessionCookie(req, res, session.token, session.expiresAt);
+    res.status(201).json({ authenticated: true, user: { id: userId, username, displayName, role } });
+  } catch (error: any) {
+    if (String(error?.message || '').includes('UNIQUE')) {
+      res.status(409).json({ error: '该用户名已存在，请换一个用户名或直接登录。' });
+      return;
+    }
+    res.status(400).json({ error: error?.message || '注册失败。' });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const username = normalizeUsername(req.body?.username);
+    const password = validatePassword(req.body?.password);
+    const row = getDb().prepare('SELECT * FROM users WHERE username = ?').get(username);
+
+    if (!row || !verifyPassword(password, row)) {
+      res.status(401).json({ error: '用户名或密码不正确。' });
+      return;
+    }
+
+    const session = createSession(row.id, req);
+    setSessionCookie(req, res, session.token, session.expiresAt);
+    res.json({ authenticated: true, user: mapAuthUser(row) });
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || '登录失败。' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const user = getCurrentSessionUser(req);
+  if (user) {
+    getDb().prepare('DELETE FROM sessions WHERE id = ?').run(user.sessionId);
+  }
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.get('/api/user-data', (req, res) => {
+  const user = requireSession(req, res);
+  if (!user) return;
+
+  const row = getDb().prepare('SELECT payload, updated_at FROM user_data WHERE user_id = ?').get(user.id);
+  if (!row) {
+    res.json({ payload: {}, updatedAt: null });
+    return;
+  }
+
+  try {
+    res.json({ payload: JSON.parse(row.payload), updatedAt: row.updated_at });
+  } catch {
+    res.json({ payload: {}, updatedAt: row.updated_at });
+  }
+});
+
+app.put('/api/user-data', (req, res) => {
+  const user = requireSession(req, res);
+  if (!user) return;
+
+  try {
+    const payload = sanitizeUserDataPayload(req.body?.payload ?? req.body ?? {});
+    const serialized = JSON.stringify(payload);
+    const updatedAt = new Date().toISOString();
+
+    getDb().prepare(`
+      INSERT INTO user_data (user_id, payload, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+    `).run(user.id, serialized, updatedAt);
+
+    res.json({ ok: true, updatedAt });
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || '同步失败。' });
+  }
 });
 
 app.post('/api/events', (req, res) => {

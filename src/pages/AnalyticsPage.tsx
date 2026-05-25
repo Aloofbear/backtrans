@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Activity, BarChart3, Clock, RefreshCcw, TrendingUp, Users } from 'lucide-react';
 import { fetchAnalyticsSummary } from '../lib/analytics';
+import { useAuth } from '../contexts/AuthContext';
 
 const ADMIN_TOKEN_STORAGE_KEY = 'backtransAnalyticsAdminToken';
 
@@ -48,15 +49,17 @@ function formatMs(value: number) {
 }
 
 export default function AnalyticsPage() {
+  const { role } = useAuth();
   const [days, setDays] = useState(30);
   const [adminToken, setAdminToken] = useState(() => window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '');
   const [tokenInput, setTokenInput] = useState('');
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(adminToken));
+  const [isLoading, setIsLoading] = useState(Boolean(adminToken || role === 'admin'));
   const [error, setError] = useState('');
+  const hasAdminAccess = role === 'admin' || Boolean(adminToken);
 
   const loadSummary = async () => {
-    if (!adminToken) return;
+    if (!hasAdminAccess) return;
     setIsLoading(true);
     setError('');
     try {
@@ -77,7 +80,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     loadSummary();
-  }, [adminToken, days]);
+  }, [adminToken, days, role]);
 
   const handleUnlock = (event: FormEvent) => {
     event.preventDefault();
@@ -142,7 +145,7 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {!adminToken ? (
+      {!hasAdminAccess ? (
         <form onSubmit={handleUnlock} className="mx-auto max-w-md rounded-2xl border border-border bg-surface p-6">
           <div className="mb-4 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20 text-primary">
@@ -175,13 +178,15 @@ export default function AnalyticsPage() {
       ) : summary && (
         <>
           <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleLock}
-              className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold text-text-muted transition-colors hover:text-danger"
-            >
-              退出管理员看板
-            </button>
+            {adminToken && (
+              <button
+                type="button"
+                onClick={handleLock}
+                className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold text-text-muted transition-colors hover:text-danger"
+              >
+                退出管理员看板
+              </button>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

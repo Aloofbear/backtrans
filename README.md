@@ -11,19 +11,19 @@ GitHub Pages mirror: https://aloofbear.github.io/backtrans/
 - Practice Chinese-to-English output against polished native English references.
 - Receive structured feedback on accuracy, grammar, vocabulary, and naturalness.
 - Save important expressions into a review queue instead of a simple bookmark list.
-- Use local learning profiles for MVP-stage practice without pretending to provide cloud accounts.
+- Use low-cost cloud accounts for cross-device learning records, while preserving local guest profiles for trial use.
 
 ## Current Architecture
 
 - Frontend: React, Vite, Tailwind CSS, React Router.
 - AI proxy: Vercel serverless API routes in `api/` for production, plus `server/index.ts` as a local development proxy.
-- Persistence: browser `localStorage` scoped by local learning profile.
+- Persistence: SQLite-backed accounts, sessions, and synced learning records on the Node/ECS server; browser `localStorage` remains as the immediate client cache and guest mode.
 - Product analytics: first-party event tracking through `/api/events`, stored on the ECS/Node server as `data/events.jsonl`, with a built-in `/analytics` dashboard.
 - Static hosting: GitHub Pages can serve the app, but AI feedback requires a deployed API proxy.
 
 ## Local Development
 
-Prerequisites: Node.js 20+ and npm.
+Prerequisites: Node.js 24+ and npm.
 
 1. Install dependencies:
 
@@ -108,6 +108,19 @@ The `/analytics` page shows the training funnel, AI success rate, feedback expan
 
 Set `ANALYTICS_ADMIN_TOKEN` on the server to protect the analytics dashboard and summary API. Without this token, `GET /api/analytics/summary` returns `401`, and the `/analytics` page only shows an admin access prompt.
 
+The ECS Node server also provides the low-cost account system:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/logout
+GET  /api/auth/me
+GET  /api/user-data
+PUT  /api/user-data
+```
+
+Usernames are unique in SQLite, passwords are hashed with `scrypt`, session tokens are stored as hashes, and every login creates an independent session so the same account can stay signed in on multiple devices. Set `ADMIN_USERNAME` and `ADMIN_INITIAL_PASSWORD` on first deployment to bootstrap the admin account; later deployments keep the existing password and only ensure the role is admin.
+
 Docker deployment:
 
 ```bash
@@ -145,8 +158,8 @@ npm run qa:corpus  # corpus sanity checks
 
 ## Roadmap
 
-- Replace local profiles with real authentication and cloud sync.
-- Add export/import for local learning records.
+- Add password reset and optional phone/email verification when the project needs real public-user operations.
+- Add export/import for cloud and local learning records.
 - Add spaced repetition scheduling by expression-level mastery.
 - Add source attribution and review workflow for corpus content.
 - Add cohort retention and experiment comparison on top of the first-party analytics event log.

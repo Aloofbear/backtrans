@@ -42,6 +42,9 @@ function setCors(req: ApiRequest, res: ApiResponse) {
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  if (allowedOrigin !== '*') {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
 }
 
 function getMainlandApiBase() {
@@ -72,8 +75,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const rawDays = Array.isArray(req.query?.days) ? req.query?.days[0] : req.query?.days;
   const days = encodeURIComponent(rawDays || '30');
   const authHeader = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
+  const cookieHeader = Array.isArray(req.headers.cookie) ? req.headers.cookie[0] : req.headers.cookie;
+  const headers: Record<string, string> = {};
+  if (authHeader) headers.Authorization = authHeader;
+  if (cookieHeader) headers.Cookie = cookieHeader;
   const response = await fetch(`${apiBase}/api/analytics/summary?days=${days}`, {
-    headers: authHeader ? { Authorization: authHeader } : undefined,
+    headers,
   });
   res.status(response.status).json(await response.json());
 }

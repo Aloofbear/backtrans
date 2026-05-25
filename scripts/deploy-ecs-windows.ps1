@@ -6,6 +6,10 @@ param(
 
   [string]$AnalyticsAdminToken = '',
 
+  [string]$AdminUsername = 'aloofbear',
+
+  [string]$AdminInitialPassword = '',
+
   [string]$RepoZipUrl = 'https://github.com/Aloofbear/backtrans/archive/refs/heads/main.zip'
 )
 
@@ -81,6 +85,9 @@ function Write-AppEnv {
     'DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions',
     "ANALYTICS_DIR=$analyticsDir",
     "ANALYTICS_ADMIN_TOKEN=$AnalyticsAdminToken",
+    "ADMIN_USERNAME=$AdminUsername",
+    "ADMIN_DISPLAY_NAME=$AdminUsername",
+    "ADMIN_INITIAL_PASSWORD=$AdminInitialPassword",
     'APP_ORIGIN=*',
     "PORT=$Port"
   )

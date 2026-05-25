@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail, RefreshCcw, BarChart3 } from 'lucide-react';
+import { BookOpen, Edit3, BookMarked, Bell, LogOut, User, Settings, Mail, RefreshCcw, BarChart3, Cloud, HardDrive, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, displayName, logout } = useAuth();
+  const { user, displayName, username, role, authMode, syncState, syncError, logout, syncCloudData } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -31,9 +31,13 @@ export default function MainLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/');
+  };
+
+  const handleSyncCloudData = async () => {
+    await syncCloudData().catch(() => undefined);
   };
 
   const navItems = [
@@ -99,16 +103,18 @@ export default function MainLayout() {
                     <a href="mailto:wtifimyf@gmail.com" className="text-sm text-blue-500 hover:underline">
                       wtifimyf@gmail.com
                     </a>
-                    <Link
-                      to="/analytics"
-                      onClick={() => setShowSettings(false)}
-                      className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold text-text-main transition-colors hover:border-primary/40 hover:text-primary"
-                    >
-                      <BarChart3 className="h-4 w-4" />
-                      产品数据看板
-                    </Link>
+                    {role === 'admin' && (
+                      <Link
+                        to="/analytics"
+                        onClick={() => setShowSettings(false)}
+                        className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold text-text-main transition-colors hover:border-primary/40 hover:text-primary"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                        产品数据看板
+                      </Link>
+                    )}
                     <p className="mt-3 text-xs leading-relaxed text-text-muted">
-                      当前版本采用本地学习档案。AI 分析需连接后端代理，不会在前端保存 API Key。
+                      AI 分析与云端账号由后端代理处理，不会在前端保存 API Key。
                     </p>
                   </div>
                 </div>
@@ -153,14 +159,40 @@ export default function MainLayout() {
             </div>
             
             {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
+              <div className="absolute right-0 mt-2 w-64 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
                 {user ? (
                   <>
                     <div className="p-4 border-b border-border">
-                      <p className="text-xs text-text-muted mb-1">当前登录账号</p>
+                      <p className="mb-1 flex items-center gap-1 text-xs text-text-muted">
+                        {authMode === 'cloud' ? <Cloud className="h-3 w-3" /> : <HardDrive className="h-3 w-3" />}
+                        {authMode === 'cloud' ? '云端账号' : '本地档案'}
+                        {role === 'admin' && <ShieldCheck className="h-3 w-3 text-primary" />}
+                      </p>
                       <p className="font-bold text-sm truncate">{displayName || user}</p>
+                      {username && <p className="mt-1 truncate text-xs text-text-muted">@{username}</p>}
+                      {authMode === 'cloud' && (
+                        <p className={`mt-2 text-xs ${syncState === 'error' ? 'text-danger' : 'text-text-muted'}`}>
+                          {syncState === 'syncing'
+                            ? '云端同步中...'
+                            : syncState === 'synced'
+                              ? '学习记录已同步'
+                              : syncState === 'error'
+                                ? syncError || '云端同步失败'
+                                : '云端同步已开启'}
+                        </p>
+                      )}
                     </div>
                     <div className="p-2">
+                      {authMode === 'cloud' && (
+                        <button
+                          onClick={handleSyncCloudData}
+                          disabled={syncState === 'syncing'}
+                          className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-text-main transition-colors hover:bg-surface-hover disabled:opacity-60"
+                        >
+                          <RefreshCcw className={`h-4 w-4 ${syncState === 'syncing' ? 'animate-spin' : ''}`} />
+                          同步学习记录
+                        </button>
+                      )}
                       <button 
                         onClick={handleLogout}
                         className="w-full text-left px-3 py-2 text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors flex items-center gap-2"
@@ -180,14 +212,14 @@ export default function MainLayout() {
                       className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-text-main hover:bg-surface-hover rounded-lg transition-colors"
                     >
                       <User className="w-4 h-4" />
-                      选择本地档案
+                      登录账号
                     </Link>
                     <Link 
                       to="/register"
                       className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors font-medium"
                     >
                       <Edit3 className="w-4 h-4" />
-                      创建本地档案
+                      创建账号
                     </Link>
                   </div>
                 )}

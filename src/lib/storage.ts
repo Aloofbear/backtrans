@@ -8,6 +8,12 @@ export interface LearningProfile {
 const PROFILE_STORAGE_KEY = 'learningProfiles';
 const CURRENT_PROFILE_KEY = 'currentProfileId';
 const memoryStorage = new Map<string, string>();
+const STORAGE_WRITE_EVENT = 'backtrans-storage-write';
+
+function notifyStorageWrite(key: string) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(STORAGE_WRITE_EVENT, { detail: { key } }));
+}
 
 function getBrowserStorage() {
   if (typeof window === 'undefined') return null;
@@ -38,17 +44,35 @@ export function readRawStorageItem(key: string) {
   return memoryStorage.get(key) ?? null;
 }
 
+export function listRawStorageKeys() {
+  const keys = new Set<string>(memoryStorage.keys());
+  const storage = getBrowserStorage();
+  if (storage) {
+    try {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        if (key) keys.add(key);
+      }
+    } catch {
+      // Keep key discovery best-effort.
+    }
+  }
+  return Array.from(keys);
+}
+
 export function writeRawStorageItem(key: string, value: string) {
   const storage = getBrowserStorage();
   if (storage) {
     try {
       storage.setItem(key, value);
+      notifyStorageWrite(key);
       return;
     } catch {
       // Fall through to session-only memory storage.
     }
   }
   memoryStorage.set(key, value);
+  notifyStorageWrite(key);
 }
 
 export function removeRawStorageItem(key: string) {
