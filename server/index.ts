@@ -514,13 +514,103 @@ function percent(part: number, total: number) {
   return Math.round((part / total) * 1000) / 10;
 }
 
+type DailyAnalyticsAccumulator = {
+  date: string;
+  events: number;
+  sessions: Set<string>;
+  visitors: Set<string>;
+  identifiedUsers: Set<string>;
+  submits: number;
+  pageViews: number;
+  practiceStarts: number;
+  translationSubmits: number;
+  reviewSubmits: number;
+  aiSuccess: number;
+  aiFailed: number;
+  feedbackExpands: number;
+  favorites: number;
+  shortSentenceSubmits: number;
+  errorBookReviews: number;
+  latencyTotalMs: number;
+  latencyCount: number;
+  eventCounts: Record<string, number>;
+};
+
+function createDailyAccumulator(date: string): DailyAnalyticsAccumulator {
+  return {
+    date,
+    events: 0,
+    sessions: new Set(),
+    visitors: new Set(),
+    identifiedUsers: new Set(),
+    submits: 0,
+    pageViews: 0,
+    practiceStarts: 0,
+    translationSubmits: 0,
+    reviewSubmits: 0,
+    aiSuccess: 0,
+    aiFailed: 0,
+    feedbackExpands: 0,
+    favorites: 0,
+    shortSentenceSubmits: 0,
+    errorBookReviews: 0,
+    latencyTotalMs: 0,
+    latencyCount: 0,
+    eventCounts: {},
+  };
+}
+
+function incrementEventBucket(bucket: DailyAnalyticsAccumulator, event: AnalyticsEvent, durationMs: number) {
+  bucket.events += 1;
+  bucket.eventCounts[event.event] = (bucket.eventCounts[event.event] || 0) + 1;
+
+  if (event.event === 'page_view') bucket.pageViews += 1;
+  if (event.event === 'practice_start') bucket.practiceStarts += 1;
+  if (event.event === 'translation_submit') bucket.translationSubmits += 1;
+  if (event.event === 'review_submit') bucket.reviewSubmits += 1;
+  if (event.event === 'ai_feedback_success') bucket.aiSuccess += 1;
+  if (event.event === 'ai_feedback_failed') bucket.aiFailed += 1;
+  if (event.event === 'feedback_expand') bucket.feedbackExpands += 1;
+  if (event.event === 'expression_favorite') bucket.favorites += 1;
+  if (event.event === 'short_sentence_submit') bucket.shortSentenceSubmits += 1;
+  if (event.event === 'errorbook_review') bucket.errorBookReviews += 1;
+  if (event.event === 'translation_submit' || event.event === 'review_submit') bucket.submits += 1;
+
+  if (event.event === 'ai_feedback_success' && Number.isFinite(durationMs)) {
+    bucket.latencyTotalMs += durationMs;
+    bucket.latencyCount += 1;
+  }
+}
+
+function summarizeAccounts() {
+  try {
+    const db = getDb();
+    const users = Number(db.prepare('SELECT COUNT(*) AS count FROM users').get()?.count || 0);
+    const admins = Number(db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'").get()?.count || 0);
+    const activeSessions = Number(db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE expires_at > datetime('now')").get()?.count || 0);
+    const syncedProfiles = Number(db.prepare('SELECT COUNT(*) AS count FROM user_data').get()?.count || 0);
+    return { users, admins, activeSessions, syncedProfiles };
+  } catch {
+    return { users: 0, admins: 0, activeSessions: 0, syncedProfiles: 0 };
+  }
+}
+
 function summarizeAnalytics(days: number) {
   const events = readAnalyticsEvents(days);
   const countByEvent: Record<string, number> = {};
-  const daily: Record<string, { date: string; events: number; sessions: Set<string>; submits: number }> = {};
+  const daily: Record<string, DailyAnalyticsAccumulator> = {};
   const bySession = new Map<string, Set<string>>();
+  const sourceCounts: Record<string, { source: string; events: number; sessions: Set<string>; visitors: Set<string>; submits: number; aiSuccess: number }> = {};
+  const pathCounts: Record<string, { path: string; events: number; sessions: Set<string>; submits: number }> = {};
   const corpusCounts: Record<string, { corpusId: string; count: number; submissions: number; feedbackSuccess: number }> = {};
   const latencies: number[] = [];
+  const hourly = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    events: 0,
+    sessions: new Set<string>(),
+    submits: 0,
+    aiSuccess: 0,
+  }));
 
   events.forEach(event => {
     countByEvent[event.event] = (countByEvent[event.event] || 0) + 1;
@@ -529,10 +619,38 @@ function summarizeAnalytics(days: number) {
     bySession.get(sessionKey)?.add(event.event);
 
     const date = event.timestamp.slice(0, 10);
-    if (!daily[date]) daily[date] = { date, events: 0, sessions: new Set(), submits: 0 };
-    daily[date].events += 1;
+    const durationMs = Number(event.properties?.durationMs);
+    if (!daily[date]) daily[date] = createDailyAccumulator(date);
     daily[date].sessions.add(sessionKey);
-    if (event.event === 'translation_submit' || event.event === 'review_submit') daily[date].submits += 1;
+    daily[date].visitors.add(event.visitorHash);
+    if (event.userId && event.userId !== 'guest') daily[date].identifiedUsers.add(event.userId);
+    incrementEventBucket(daily[date], event, durationMs);
+
+    const hour = new Date(event.timestamp).getHours();
+    if (Number.isInteger(hour) && hourly[hour]) {
+      hourly[hour].events += 1;
+      hourly[hour].sessions.add(sessionKey);
+      if (event.event === 'translation_submit' || event.event === 'review_submit') hourly[hour].submits += 1;
+      if (event.event === 'ai_feedback_success') hourly[hour].aiSuccess += 1;
+    }
+
+    const source = event.source || 'unknown';
+    if (!sourceCounts[source]) {
+      sourceCounts[source] = { source, events: 0, sessions: new Set(), visitors: new Set(), submits: 0, aiSuccess: 0 };
+    }
+    sourceCounts[source].events += 1;
+    sourceCounts[source].sessions.add(sessionKey);
+    sourceCounts[source].visitors.add(event.visitorHash);
+    if (event.event === 'translation_submit' || event.event === 'review_submit') sourceCounts[source].submits += 1;
+    if (event.event === 'ai_feedback_success') sourceCounts[source].aiSuccess += 1;
+
+    const pagePath = event.path || '/';
+    if (!pathCounts[pagePath]) {
+      pathCounts[pagePath] = { path: pagePath, events: 0, sessions: new Set(), submits: 0 };
+    }
+    pathCounts[pagePath].events += 1;
+    pathCounts[pagePath].sessions.add(sessionKey);
+    if (event.event === 'translation_submit' || event.event === 'review_submit') pathCounts[pagePath].submits += 1;
 
     const corpusId = String(event.properties?.corpusId ?? '');
     if (corpusId) {
@@ -542,16 +660,59 @@ function summarizeAnalytics(days: number) {
       if (event.event === 'ai_feedback_success') corpusCounts[corpusId].feedbackSuccess += 1;
     }
 
-    const durationMs = Number(event.properties?.durationMs);
     if (event.event === 'ai_feedback_success' && Number.isFinite(durationMs)) latencies.push(durationMs);
   });
 
   const sessionsWith = (eventName: string) => Array.from(bySession.values()).filter(eventsInSession => eventsInSession.has(eventName)).length;
+  const sessionsWithBoth = (from: string, to: string) => Array.from(bySession.values()).filter(eventsInSession => eventsInSession.has(from) && eventsInSession.has(to)).length;
   const pageViewSessions = sessionsWith('page_view') || bySession.size;
   const practiceStartSessions = sessionsWith('practice_start');
   const submitSessions = sessionsWith('translation_submit');
   const aiSuccessSessions = sessionsWith('ai_feedback_success');
+  const translationAiSuccessSessions = sessionsWithBoth('translation_submit', 'ai_feedback_success');
+  const feedbackExpandSessions = sessionsWith('feedback_expand');
+  const favoriteSessions = sessionsWith('expression_favorite');
   const reviewSubmitSessions = sessionsWith('review_submit');
+  const funnelStages = [
+    { key: 'page_view', label: '页面访问', sessions: pageViewSessions },
+    { key: 'practice_start', label: '开始训练', sessions: practiceStartSessions },
+    { key: 'translation_submit', label: '提交译文', sessions: submitSessions },
+    { key: 'ai_feedback_success', label: 'AI 成功', sessions: translationAiSuccessSessions },
+    { key: 'feedback_expand', label: '展开详情', sessions: feedbackExpandSessions },
+    { key: 'expression_favorite', label: '收藏表达', sessions: favoriteSessions },
+  ].map((stage, index, stages) => {
+    const previousSessions = index === 0 ? stage.sessions : stages[index - 1].sessions;
+    const conversionRate = index === 0 ? 100 : percent(stage.sessions, previousSessions);
+    return {
+      ...stage,
+      conversionRate,
+      dropoffSessions: Math.max(0, previousSessions - stage.sessions),
+      dropoffRate: index === 0 ? 0 : Math.max(0, Math.round((100 - conversionRate) * 10) / 10),
+      shareOfEntrance: percent(stage.sessions, pageViewSessions),
+    };
+  });
+  const relationPairs = [
+    ['page_view', 'practice_start', '访问到开始训练'],
+    ['practice_start', 'translation_submit', '开始到提交'],
+    ['translation_submit', 'ai_feedback_success', '提交到 AI 成功'],
+    ['ai_feedback_success', 'feedback_expand', 'AI 成功到展开详情'],
+    ['ai_feedback_success', 'expression_favorite', 'AI 成功到收藏表达'],
+    ['page_view', 'review_submit', '访问到复习提交'],
+    ['review_submit', 'ai_feedback_success', '复习提交到 AI 成功'],
+  ].map(([from, to, label]) => {
+    const fromSessions = from === 'page_view' ? pageViewSessions : sessionsWith(from);
+    const toSessions = sessionsWith(to);
+    const linkedSessions = sessionsWithBoth(from, to);
+    return {
+      from,
+      to,
+      label,
+      fromSessions,
+      toSessions,
+      linkedSessions,
+      conversionRate: percent(linkedSessions, fromSessions),
+    };
+  });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -561,7 +722,12 @@ function summarizeAnalytics(days: number) {
       sessions: bySession.size,
       visitors: new Set(events.map(event => event.visitorHash)).size,
       identifiedUsers: new Set(events.map(event => event.userId).filter(userId => userId && userId !== 'guest')).size,
+      submissions: (countByEvent.translation_submit || 0) + (countByEvent.review_submit || 0),
+      practiceStarts: countByEvent.practice_start || 0,
+      feedbackExpands: countByEvent.feedback_expand || 0,
+      favorites: countByEvent.expression_favorite || 0,
     },
+    accounts: summarizeAccounts(),
     funnel: {
       pageViewSessions,
       practiceStartSessions,
@@ -571,19 +737,74 @@ function summarizeAnalytics(days: number) {
       startRate: percent(practiceStartSessions, pageViewSessions),
       submitRate: percent(submitSessions, practiceStartSessions),
       aiSuccessRate: percent(aiSuccessSessions, submitSessions + reviewSubmitSessions),
-      feedbackExpandRate: percent(sessionsWith('feedback_expand'), aiSuccessSessions),
-      favoriteRate: percent(sessionsWith('expression_favorite'), aiSuccessSessions),
+      feedbackExpandRate: percent(feedbackExpandSessions, aiSuccessSessions),
+      favoriteRate: percent(favoriteSessions, aiSuccessSessions),
       reviewUsageRate: percent(reviewSubmitSessions, pageViewSessions),
+      stages: funnelStages,
+      relations: relationPairs,
     },
     ai: {
       success: countByEvent.ai_feedback_success || 0,
       failed: countByEvent.ai_feedback_failed || 0,
+      requests: (countByEvent.ai_feedback_success || 0) + (countByEvent.ai_feedback_failed || 0),
+      failureRate: percent(countByEvent.ai_feedback_failed || 0, (countByEvent.ai_feedback_success || 0) + (countByEvent.ai_feedback_failed || 0)),
       averageLatencyMs: latencies.length ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length) : 0,
     },
     countByEvent,
     daily: Object.values(daily)
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map(item => ({ date: item.date, events: item.events, sessions: item.sessions.size, submits: item.submits })),
+      .map(item => ({
+        date: item.date,
+        events: item.events,
+        sessions: item.sessions.size,
+        visitors: item.visitors.size,
+        identifiedUsers: item.identifiedUsers.size,
+        submits: item.submits,
+        pageViews: item.pageViews,
+        practiceStarts: item.practiceStarts,
+        translationSubmits: item.translationSubmits,
+        reviewSubmits: item.reviewSubmits,
+        aiSuccess: item.aiSuccess,
+        aiFailed: item.aiFailed,
+        feedbackExpands: item.feedbackExpands,
+        favorites: item.favorites,
+        shortSentenceSubmits: item.shortSentenceSubmits,
+        errorBookReviews: item.errorBookReviews,
+        averageLatencyMs: item.latencyCount ? Math.round(item.latencyTotalMs / item.latencyCount) : 0,
+        startRate: percent(item.practiceStarts, item.sessions.size),
+        submitRate: percent(item.translationSubmits, item.practiceStarts),
+        aiSuccessRate: percent(item.aiSuccess, item.translationSubmits + item.reviewSubmits),
+        eventCounts: item.eventCounts,
+      })),
+    hourly: hourly.map(item => ({
+      hour: item.hour,
+      events: item.events,
+      sessions: item.sessions.size,
+      submits: item.submits,
+      aiSuccess: item.aiSuccess,
+    })),
+    sourceBreakdown: Object.values(sourceCounts)
+      .sort((a, b) => b.sessions.size - a.sessions.size || b.events - a.events)
+      .map(item => ({
+        source: item.source,
+        events: item.events,
+        sessions: item.sessions.size,
+        visitors: item.visitors.size,
+        submits: item.submits,
+        aiSuccess: item.aiSuccess,
+        submitRate: percent(item.submits, item.sessions.size),
+        aiSuccessRate: percent(item.aiSuccess, item.submits),
+      })),
+    topPaths: Object.values(pathCounts)
+      .sort((a, b) => b.sessions.size - a.sessions.size || b.events - a.events)
+      .slice(0, 8)
+      .map(item => ({
+        path: item.path,
+        events: item.events,
+        sessions: item.sessions.size,
+        submits: item.submits,
+        submitRate: percent(item.submits, item.sessions.size),
+      })),
     topCorpus: Object.values(corpusCounts)
       .sort((a, b) => b.submissions - a.submissions || b.count - a.count)
       .slice(0, 10),
